@@ -1,6 +1,6 @@
-# 
-# 
-# 
+#
+#
+#
 # class ExceptionMonitorAnalyser(channelCount: Int) extends Analyser {
 #   setConfiguration("SyncChannels", List(1), value => value.asInstanceOf[List[Int]].forall(c => c >= 0 && c < channelCount))
 
@@ -559,7 +559,7 @@
 #     val triggerPulseCount: Int = getConfiguration("TriggerPulseCount")
 #     val randomNumbersAlice = getConfiguration("AliceRandomNumbers").asInstanceOf[List[Int]].toArray
 #     val randomNumbersBob = getConfiguration("BobRandomNumbers").asInstanceOf[List[Int]].toArray
-  
+
 #     val randomNumberDeltasRef = randomNumbersAlice.zip(randomNumbersBob).map(z => {
 #       if (z._1 >= 64 && z._2 >= 64) {
 #         ((z._1 - z._2) >> 2) match {
@@ -582,7 +582,7 @@
 
 #     val pcMeta1 = pcMeta(dataBlock.getContent(syncChannel), dataBlock.getContent(channel1), period)
 #     val pcMeta2 = pcMeta(dataBlock.getContent(syncChannel), dataBlock.getContent(channel2), period)
-    
+
 #     val deltaMetasRef1 = metaStat(pcMeta1, sectionPulseCount, triggerPulseCount, center, referenceGateWidth, randomNumberDeltasRef)
 #     //.filter(z => z._3 > center - gateWidth / 2 && z._3 < center + gateWidth / 2)
 #     // val deltaMetas1A = deltaMetas1.filter(z => z._2 % 2 == 0)

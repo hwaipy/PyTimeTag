@@ -1,7 +1,7 @@
 __author__ = 'Hwaipy'
 
 import unittest
-from pytimetag import DataBlock, DataBlockSerializer, Validator, CounterAnalyser, HistogramAnalyser
+from pytimetag import DataBlock, Validator, CounterAnalyser, HistogramAnalyser
 from random import Random
 
 class DataBlockTest(unittest.TestCase):
