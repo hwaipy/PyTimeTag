@@ -19,8 +19,8 @@ class HistogramAnalyser(Analyser):
     self.setConfiguration("Divide", 1, Validator.int(min=1))
 
   def analysis(self, dataBlock):
-    if True:
-      return self.analysisJIT(dataBlock)
+    # if True:
+    #   return self.analysisJIT(dataBlock)
     syncChannel = self.getConfiguration("Sync")
     signalChannels = self.getConfiguration("Signals")
     viewStart = self.getConfiguration("ViewStart")
@@ -28,39 +28,41 @@ class HistogramAnalyser(Analyser):
     binCount = self.getConfiguration("BinCount")
     divide = self.getConfiguration("Divide")
     tList = dataBlock.content[syncChannel]
-    viewFrom = viewStart
-    viewTo = viewStop
-    histograms = []
-    for signalChannel in signalChannels:
-      deltas = []
-      sList = dataBlock.content[signalChannel]
-      if len(tList) > 0 and len(sList) > 0:
-        preStartT = 0
-        lengthT = len(tList)
-        sp = 0
-        while sp < len(sList):
-          s = sList[sp]
-          cont = True
-          while (preStartT < lengthT and cont):
-            t = tList[preStartT]
-            delta = s - t
-            if (delta > viewTo):
-              preStartT += 1
-            else:
-              cont = False
-          tIndex = preStartT
-          cont = True
-          while (tIndex < lengthT and cont):
-            t = tList[tIndex]
-            delta = s - t
-            if (delta > viewFrom):
-              deltas.append(delta)
-              tIndex += 1
-            else:
-              cont = False
-          sp += 1
-      histograms.append(Histogram(deltas, binCount, viewFrom, viewTo, divide).yData)
-    return {'Histograms': histograms}
+    print(tList)
+    # viewFrom = viewStart
+    # viewTo = viewStop
+    # histograms = []
+    # for signalChannel in signalChannels:
+    #   deltas = []
+    #   sList = dataBlock.content[signalChannel]
+    #   if len(tList) > 0 and len(sList) > 0:
+    #     preStartT = 0
+    #     lengthT = len(tList)
+    #     sp = 0
+    #     while sp < len(sList):
+    #       s = sList[sp]
+    #       cont = True
+    #       while (preStartT < lengthT and cont):
+    #         t = tList[preStartT]
+    #         delta = s - t
+    #         if (delta > viewTo):
+    #           preStartT += 1
+    #         else:
+    #           cont = False
+    #       tIndex = preStartT
+    #       cont = True
+    #       while (tIndex < lengthT and cont):
+    #         t = tList[tIndex]
+    #         delta = s - t
+    #         if (delta > viewFrom):
+    #           deltas.append(delta)
+    #           tIndex += 1
+    #         else:
+    #           cont = False
+    #       sp += 1
+    #   histograms.append(Histogram(deltas, binCount, viewFrom, viewTo, divide).yData)
+    # return {'Histograms': histograms}
+    return {}
 
   def dataIncomeJIT(self, dataBlock):
     if self.on:

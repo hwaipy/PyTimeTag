@@ -5,7 +5,6 @@ __email__ = 'hwaipy@gmail.com'
 import math
 import time
 from random import Random
-import numpy as np
 from pytimetag.native.native import serializeNative, deserializeNative, convertNativeContent, convertContent
 import msgpack
 
@@ -119,6 +118,7 @@ class DataBlock:
         "Content": serializedContent
     }
     return msgpack.packb(result, use_bin_type=True)
+    # return b''
 
   def getContent(self, channel=None):
     if self.content is None:
