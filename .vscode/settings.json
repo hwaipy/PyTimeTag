@@ -13,4 +13,7 @@
         "--indent-size=2",
         "--max-line-length", "1000", "--experimental"
     ],
+    "files.associations": {
+        "timetag.h": "c"
+    },
 }

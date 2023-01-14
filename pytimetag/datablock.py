@@ -6,7 +6,7 @@ import math
 import time
 from random import Random
 import numpy as np
-from pytimetag.datablockserialJIT import serializeJIT, deserializeJIT
+from pytimetag.native.native import serializeNative, deserializeNative, convertNativeContent, convertContent
 import msgpack
 
 
@@ -85,26 +85,29 @@ class DataBlock:
     self.sizes = sizes
     self.resolution = resolution
     self.content = None
+    self.__contentNative = None
     self.__binaryRef = None
 
   def release(self):
     self.content = None
+    self.__contentNative = None
     self.__binaryRef = None
 
   def isReleased(self):
-    return self.content is None and self.__binaryRef is None
+    return self.content is None and self.__contentNative is None and self.__binaryRef is None
 
   def serialize(self, protocol=DEFAULT_PROTOCOL):
-    if self.content is None:
+    if self.__contentNative is None:
+      self.__contentNative = convertNativeContent(self.content)
+    if self.__contentNative is None:
       serializedContent = None
     else:
       serializedContent = []
-      for ch in self.content:
+      for ch in self.__contentNative:
         sectionNum = math.ceil(len(ch) / DataBlock.FINENESS)
         channelSC = []
         for i in range(sectionNum):
-          dataSection = ch[i * DataBlock.FINENESS: (i + 1) * DataBlock.FINENESS]
-          channelSC.append(DataBlockSerializer.instance(protocol).serialize(dataSection))
+          channelSC.append(DataBlockSerializer.instance(protocol).serialize(ch, i * DataBlock.FINENESS, min(len(ch), (i + 1) * DataBlock.FINENESS)))
         serializedContent.append(channelSC)
     result = {
         "Format": DataBlock.PROTOCOL_V1,
@@ -116,6 +119,15 @@ class DataBlock:
         "Content": serializedContent
     }
     return msgpack.packb(result, use_bin_type=True)
+
+  def getContent(self, channel=None):
+    if self.content is None:
+      if self.__contentNative is not None: raise RuntimeError('This DataBlock is not Pythonalized.')
+      if self.__binaryRef is not None: raise RuntimeError('This DataBlock is not unpacked.')
+    return None if self.content is None else (self.content if channel is None else self.content[channel])
+
+  def pythonalize(self):
+      self.content = convertContent(self.__contentNative)
 
   def convertResolution(self, resolution):
     ratio = self.resolution / resolution
@@ -134,51 +146,56 @@ class DataBlock:
       chDatas = self.__binaryRef
       content = []
       for chData in chDatas:
-        recoveredChannel = []
-        for section in chData:
-          recoveredChannel += DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).deserialize(section)
+        recoveredChannel = DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).deserialize(chData)
         content.append(recoveredChannel)
-      self.content = content
-    else:
       self.content = None
+      self.__contentNative = content
       self.__binaryRef = None
+    # else:
+    #   self.__content = None
+    #   self.__contentNative = None
 
 
 class DataBlockSerializer:
   class DataBlockSerializerImp:
-    def serialize(self, data):
+    def serialize(self, data, begin=None, end=None):
       raise RuntimeError('Not Implemented')
 
     def deserialize(self, data):
       raise RuntimeError('Not Implemented')
 
-  class PV1DBS(DataBlockSerializerImp):
+  # class PV1DBS_JIT(DataBlockSerializerImp):
+  #   def __init__(self):
+  #     self.MAX_VALUE = 1e16
+
+  #   def serialize(self, data, begin=0, end=-1):
+  #     if len(data) == 0:
+  #       return b''
+  #     data = data[begin: end]
+  #     buffer = bytearray(len(data) * 8)
+  #     n = serializeJIT(np.array(data), buffer, bytearray(16))
+  #     return bytes(buffer[:n])
+
+  #   def deserialize(self, data):
+  #     if len(data) == 0:
+  #       return []
+  #     return deserializeJIT(data)
+
+  class PV1DBS_Native(DataBlockSerializerImp):
     def __init__(self):
       self.MAX_VALUE = 1e16
 
-    def serialize(self, data):
+    def serialize(self, data, begin=None, end=None):
       if len(data) == 0:
         return b''
-      buffer = bytearray(len(data) * 8)
-      n = serializeJIT(np.array(data), buffer, bytearray(16))
-      return bytes(buffer[:n])
+      return serializeNative(data, 0 if begin is None else begin, len(data) if end is None else end)
 
     def deserialize(self, data):
       if len(data) == 0:
         return []
-      return deserializeJIT(data)
+      return deserializeNative(data)
 
-  class PV1DBS_JIT(DataBlockSerializerImp):
-    def __init__(self):
-      self.MAX_VALUE = 1e16
-
-    def serialize(self, data):
-      return serializeJIT(np.array(data))
-
-    def deserialize(self, data):
-      return deserializeJIT(data)
-
-  DBS = {DataBlock.PROTOCOL_V1: PV1DBS()}
+  DBS = {DataBlock.PROTOCOL_V1: PV1DBS_Native()}
 
   @classmethod
   def instance(cls, name):
@@ -226,64 +243,71 @@ def serialize(data):
 
 if __name__ == '__main__':
   print('DataBlock')
-  from urllib.request import urlopen
-  from interactionfreepy import IFWorker
-  import time
-  import msgpack
-  import numpy as np
-  worker = IFWorker('tcp://10.1.1.1:224')
+  # from urllib.request import urlopen
+  # from interactionfreepy import IFWorker
+  # import time
+  # import msgpack
+  # import numpy as np
+  # worker = IFWorker('tcp://10.1.1.1:224')
 
-  beginTime = '2022-04-06 05:00:00'
-  endTime = '2022-04-06 05:59:59'
+  # beginTime = '2022-04-06 05:00:00'
+  # endTime = '2022-04-06 05:59:59'
 
-  ranges = worker.Storage.range('TFQKD_TDC', beginTime.replace(' ', 'T') + '+08:00', endTime.replace(' ', 'T') + '+08:00', filter={'_id': 1})
+  # ranges = worker.Storage.range('TFQKD_TDC', beginTime.replace(' ', 'T') + '+08:00', endTime.replace(' ', 'T') + '+08:00', filter={'_id': 1})
 
-  iN = 0
-  for dataMeta in ranges[:10]:
-    fetchTime = dataMeta['FetchTime']
-    # t1 = time.time()
-    # dbJ = worker.TDCRawDataServerDebug.fetchRawDataBlock('http://192.168.25.5:1001', fetchTime.replace('T', ' ').replace(':', '-')[:-9])
-    # t2 = time.time()
+  # iN = 0
+  # for dataMeta in ranges[:10]:
+  #   fetchTime = dataMeta['FetchTime']
+  #   # t1 = time.time()
+  #   # dbJ = worker.TDCRawDataServerDebug.fetchRawDataBlock('http://192.168.25.5:1001', fetchTime.replace('T', ' ').replace(':', '-')[:-9])
+  #   # t2 = time.time()
 
-    res = urlopen(f'http://192.168.25.5:1001/{fetchTime.split("T")[0]}/{fetchTime.split("T")[1][:2]}/{fetchTime[:23].replace("T", "%20").replace(":", "-")}.datablock')
-    data = res.read()
-    res.close()
-    dbJIT = DataBlock.deserialize(data)
+  #   res = urlopen(f'http://192.168.25.5:1001/{fetchTime.split("T")[0]}/{fetchTime.split("T")[1][:2]}/{fetchTime[:23].replace("T", "%20").replace(":", "-")}.datablock')
+  #   data = res.read()
+  #   res.close()
+  #   dbJIT = DataBlock.deserialize(data)
 
-  #     # assert(dbJIT.creationTime == dbJ['CreationTime'])
-  #     # assert(dbJIT.resolution == dbJ['Resolution'])
-  #     # assert(dbJIT.dataTimeBegin == dbJ['DataTimeBegin'])
-  #     # assert(dbJIT.dataTimeEnd == dbJ['DataTimeEnd'])
-  #     # assert(dbJIT.sizes == [len(c) for c in dbJ['Content']])
-  #     # for ic in range(len(dbJIT.sizes)):
-  #     #     cP = dbJIT.content[ic]
-  #     #     cJ = dbJ['Content'][ic]
-  #     #     for i in range(len(cP)):
-  #     #         assert cP[i] == cJ[i]
-  #     print(len(data))
+  # #     # assert(dbJIT.creationTime == dbJ['CreationTime'])
+  # #     # assert(dbJIT.resolution == dbJ['Resolution'])
+  # #     # assert(dbJIT.dataTimeBegin == dbJ['DataTimeBegin'])
+  # #     # assert(dbJIT.dataTimeEnd == dbJ['DataTimeEnd'])
+  # #     # assert(dbJIT.sizes == [len(c) for c in dbJ['Content']])
+  # #     # for ic in range(len(dbJIT.sizes)):
+  # #     #     cP = dbJIT.content[ic]
+  # #     #     cJ = dbJ['Content'][ic]
+  # #     #     for i in range(len(cP)):
+  # #     #         assert cP[i] == cJ[i]
+  # #     print(len(data))
 
-    t1 = time.time()
-    se = dbJIT.serialize()
-    t2 = time.time()
-    print(t2 - t1, len(se))
-    des = DataBlock.deserialize(se)
+  #   t1 = time.time()
+  #   se = dbJIT.serialize()
+  #   t2 = time.time()
+  #   print(t2 - t1, len(se))
+  #   des = DataBlock.deserialize(se)
 
-    assert (dbJIT.creationTime == des.creationTime)
-    assert (dbJIT.resolution == des.resolution)
-    assert (dbJIT.dataTimeBegin == des.dataTimeBegin)
-    assert (dbJIT.dataTimeEnd == des.dataTimeEnd)
-    assert (dbJIT.sizes == [len(c) for c in des.content])
-    for ic in range(len(dbJIT.sizes)):
-      cP = dbJIT.content[ic]
-      cJ = des.content[ic]
-      for i in range(len(cP)):
-        assert cP[i] == cJ[i]
+  #   assert (dbJIT.creationTime == des.creationTime)
+  #   assert (dbJIT.resolution == des.resolution)
+  #   assert (dbJIT.dataTimeBegin == des.dataTimeBegin)
+  #   assert (dbJIT.dataTimeEnd == des.dataTimeEnd)
+  #   assert (dbJIT.sizes == [len(c) for c in des.content])
+  #   for ic in range(len(dbJIT.sizes)):
+  #     cP = dbJIT.content[ic]
+  #     cJ = des.content[ic]
+  #     for i in range(len(cP)):
+  #       assert cP[i] == cJ[i]
 
-    dataBlock = {
-        'CreationTime': dataBlock.creationTime,
-        'DataTimeBegin': dataBlock.dataTimeBegin,
-        'DataTimeEnd': dataBlock.dataTimeEnd,
-        'Sizes': dataBlock.sizes,
-        'Resolution': dataBlock.resolution,
-        'Content': dataBlock.content,
-    }
+  #   dataBlock = {
+  #       'CreationTime': dataBlock.creationTime,
+  #       'DataTimeBegin': dataBlock.dataTimeBegin,
+  #       'DataTimeEnd': dataBlock.dataTimeEnd,
+  #       'Sizes': dataBlock.sizes,
+  #       'Resolution': dataBlock.resolution,
+  #       'Content': dataBlock.content,
+  #   }
+
+  testDataBlock = DataBlock.generate({"CreationTime": 100, "DataTimeBegin": 10, "DataTimeEnd": 1000000000010}, {1: ['Period', 10]})
+  data = testDataBlock.serialize()
+  recovered = DataBlock.deserialize(data)
+  print('done')
+  recovered.pythonalize()
+  print(list(recovered.getContent(1)))

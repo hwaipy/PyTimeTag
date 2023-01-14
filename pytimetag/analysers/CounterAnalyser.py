@@ -8,6 +8,6 @@ from pytimetag.Analyser import Analyser
 class CounterAnalyser(Analyser):
   def analysis(self, dataBlock):
     result = {}
-    for ch in range(len(dataBlock.content)):
-      result[str(ch)] = len(dataBlock.content[ch])
+    for ch in range(len(dataBlock.getContent())):
+      result[str(ch)] = len(dataBlock.getContent(ch))
     return result

@@ -6,8 +6,8 @@ if __name__ == '__main__':
 
   def run():
     print("\n ******** Start BenchMarking ******** \n")
-    # benchMarkingSerDeser()
-    benchMarkingMultiHistogramAnalyser()
+    benchMarkingSerDeser()
+    # benchMarkingMultiHistogramAnalyser()
 #     // doBenchMarkingSyncedDataBlock()
 #     // doBenchMarkingMultiHistogramAnalyser()
 #     // doBenchMarkingExceptionMonitorAnalyser()
@@ -16,12 +16,13 @@ if __name__ == '__main__':
 
   def benchMarkingSerDeser():
     configs = [
-        ("Period List", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Period", r)}, 1e-12),
-        ("Period List, 16 ps", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Period", r)}, 16e-12),
-        ("Random List", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Random", r)}, 1e-12),
-        ("Random List, 16 ps", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Random", r)}, 16e-12),
-        ("Mixed List", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Period", int(r / 10)), 1: ("Random", int(r / 10 * 4)), 5: ("Random", int(r / 10 * 5)), 10: ("Period", 10), 12: ("Random", 1)}, 1e-12),
-        ("Mixed List, 16 ps", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Period", int(r / 10)), 1: ("Random", int(r / 10 * 4)), 5: ("Random", int(r / 10 * 5)), 10: ("Period", 10), 12: ("Random", 1)}, 16e-12),
+        ("Period List", (4000000,), lambda r: {0: ("Period", r)}, 1e-12),
+        # ("Period List", (10000, 100000, 1000000, 4000000, 10000000), lambda r: {0: ("Period", r)}, 1e-12),
+        # ("Period List, 16 ps", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Period", r)}, 16e-12),
+        # ("Random List", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Random", r)}, 1e-12),
+        # ("Random List, 16 ps", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Random", r)}, 16e-12),
+        # ("Mixed List", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Period", int(r / 10)), 1: ("Random", int(r / 10 * 4)), 5: ("Random", int(r / 10 * 5)), 10: ("Period", 10), 12: ("Random", 1)}, 1e-12),
+        # ("Mixed List, 16 ps", (10000, 100000, 1000000, 4000000), lambda r: {0: ("Period", int(r / 10)), 1: ("Random", int(r / 10 * 4)), 5: ("Random", int(r / 10 * 5)), 10: ("Period", 10), 12: ("Random", 1)}, 16e-12),
     ]
     for config in configs:
       rt = ReportTable(f'DataBlock serial/deserial: {config[0]}', ("Event Size", "Data Rate", "Serial Time", "Deserial Time")).setFormatter(0, formatterKMG).setFormatter(1, lambda dr: "{:.2f}".format(dr)).setFormatter(2, lambda second: "{:.2f} ms".format(second * 1000)).setFormatter(3, lambda second: "{:.2f} ms".format(second * 1000))
@@ -36,7 +37,7 @@ if __name__ == '__main__':
     data = testDataBlock.serialize()
     recovered = DataBlock.deserialize(data)
     consumingSerialization = doBenchMarkingOpertion(lambda: testDataBlock.serialize())
-    infoRate = len(data) / sum([len(ch) for ch in testDataBlock.content])
+    infoRate = len(data) / sum([len(ch) for ch in testDataBlock.getContent()])
     consumingDeserialization = doBenchMarkingOpertion(lambda: DataBlock.deserialize(data))
     return (infoRate, consumingSerialization, consumingDeserialization)
 

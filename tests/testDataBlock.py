@@ -4,6 +4,7 @@ import unittest
 from pytimetag import DataBlock, DataBlockSerializer
 import numpy as np
 from random import Random
+from pytimetag.native.native import convertNativeList
 
 class DataBlockTest(unittest.TestCase):
     rnd = Random()
@@ -20,15 +21,15 @@ class DataBlockTest(unittest.TestCase):
             {'CreationTime': 100, 'DataTimeBegin': 10, 'DataTimeEnd': 1000000000010}, 
             {0: ['Period', 10000], 1: ['Random', 230000], 5: ['Random', 105888], 10: ['Period', 10]}
         )
-        self.assertTrue(testDataBlock.content is not None)
+        self.assertTrue(testDataBlock.getContent() is not None)
         self.assertFalse(testDataBlock.isReleased())
-        self.assertEqual(len(testDataBlock.content[0]), 10000)
-        self.assertEqual(len(testDataBlock.content[1]), 230000)
-        self.assertEqual(len(testDataBlock.content[5]), 105888)
-        self.assertEqual(len(testDataBlock.content[10]), 10)
-        self.assertEqual(testDataBlock.content[10][5] - testDataBlock.content[10][4], 100000000000)
+        self.assertEqual(len(testDataBlock.getContent(0)), 10000)
+        self.assertEqual(len(testDataBlock.getContent(1)), 230000)
+        self.assertEqual(len(testDataBlock.getContent(5)), 105888)
+        self.assertEqual(len(testDataBlock.getContent(10)), 10)
+        self.assertEqual(testDataBlock.getContent(10)[5] - testDataBlock.getContent(10)[4], 100000000000)
         testDataBlock.release()
-        self.assertIsNone(testDataBlock.content)
+        self.assertIsNone(testDataBlock.getContent())
         self.assertTrue(testDataBlock.isReleased())
         self.assertEqual(testDataBlock.sizes[0], 10000)
         self.assertEqual(testDataBlock.sizes[1], 230000)
@@ -38,17 +39,17 @@ class DataBlockTest(unittest.TestCase):
 
     def testDataBlockSerializerProtocolDataBlockV1(self):
         self.assertEqual(DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize([]), b'')
-        self.assertEqual(DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize([823784993]), bytes(bytearray([0, 0, 0, 0, 49, 25, 246, 33])))
-        self.assertEqual(DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize([823784993, 823784993 + 200, 823784993 + 2000, 823784993 + 2000, 823784993 + 2201]), bytes(bytearray([0, 0, 0, 0, 49, 25, 246, 33, 48, 200, 55, 8, 16, 48, 201])))
-        self.assertEqual(DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize([0, -1, -8, -17, -145, -274]), bytes(bytearray([0, 0, 0, 0, 0, 0, 0, 0, 31, 25, 47, 114, 128, 63, 127])))
+        self.assertEqual(DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize(convertNativeList([823784993])), bytes(bytearray([0, 0, 0, 0, 49, 25, 246, 33])))
+        self.assertEqual(DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize(convertNativeList([823784993, 823784993 + 200, 823784993 + 2000, 823784993 + 2000, 823784993 + 2201])), bytes(bytearray([0, 0, 0, 0, 49, 25, 246, 33, 48, 200, 55, 8, 16, 48, 201])))
+        self.assertEqual(DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize(convertNativeList([0, -1, -8, -17, -145, -274])), bytes(bytearray([0, 0, 0, 0, 0, 0, 0, 0, 31, 25, 47, 114, 128, 63, 127])))
         list1 = list(np.array([[1000 + i, 0] for i in range(2)]).flatten())
-        binary1 = DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize(list1)
+        binary1 = DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize(convertNativeList(list1))
         desList1 = DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).deserialize(binary1)
-        self.assertEqual(list1, desList1)
-        list2 = [int((DataBlockTest.rnd.random() - 0.5) * 1e14) for i in range(10000)]
-        binary2 = DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize(list2)
+        self.assertEqual(list1, [i for i in desList1])
+        list2 = [int((DataBlockTest.rnd.random() - 0.5) * 1e14) for i in range(10)]
+        binary2 = DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).serialize(convertNativeList(list2))
         desList2 = DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).deserialize(binary2)
-        self.assertEqual(list2, desList2)
+        self.assertEqual(list2, [i for i in desList2])
 
     def testDataBlockSerializationAndDeserialization(self):
         testDataBlock = DataBlock.generate(
@@ -57,12 +58,14 @@ class DataBlockTest(unittest.TestCase):
         )
         binary = testDataBlock.serialize()
         recoveredDataBlock = DataBlock.deserialize(binary)
+        recoveredDataBlock.pythonalize()
         self.assertDataBlockEqual(testDataBlock, recoveredDataBlock)
 
     def testDataBlockSerializationAndDeserializationWithRandomizedData(self):
         testDataBlock = DataBlock.create([[DataBlockTest.rnd.randint(0, 1000000000000) for i in range(10000)]], 100001, 0, 1000000000000)
         binary = testDataBlock.serialize()
         recoveredDataBlock = DataBlock.deserialize(binary)
+        recoveredDataBlock.pythonalize()
         self.assertDataBlockEqual(testDataBlock, recoveredDataBlock)
 
     def testDataBlockSerializationAndDeserializationWithTotallyReversedData(self):
@@ -71,6 +74,7 @@ class DataBlockTest(unittest.TestCase):
         testDataBlock = DataBlock.create([ch1], 100001, 0, 1000000000000)
         binary = testDataBlock.serialize()
         recoveredDataBlock = DataBlock.deserialize(binary)
+        recoveredDataBlock.pythonalize()
         self.assertDataBlockEqual(testDataBlock, recoveredDataBlock)
 
     def testDataBlockSerializationAndDeserializationWithReleasedDataBlock(self):
@@ -82,8 +86,8 @@ class DataBlockTest(unittest.TestCase):
         binary = testDataBlock.serialize()
         recoveredDataBlock = DataBlock.deserialize(binary)
         self.assertDataBlockEqual(testDataBlock, recoveredDataBlock, compareContent=False)
-        self.assertIsNone(testDataBlock.content)
-        self.assertIsNone(recoveredDataBlock.content)
+        self.assertIsNone(testDataBlock.getContent())
+        self.assertIsNone(recoveredDataBlock.getContent())
 
     def testDataBlockConvertResolution(self):
         fineDataBlock = DataBlock.generate(
@@ -97,10 +101,10 @@ class DataBlockTest(unittest.TestCase):
         self.assertEqual(fineDataBlock.sizes, coarseDataBlock1.sizes)
         self.assertEqual(fineDataBlock.resolution, 1e-12)
         self.assertEqual(coarseDataBlock1.resolution, 12e-12)
-        self.assertEqual(len(fineDataBlock.content), len(coarseDataBlock1.content))
+        self.assertEqual(len(fineDataBlock.getContent()), len(coarseDataBlock1.getContent()))
         for ch in range(len(fineDataBlock.sizes)):
-            ch1 = fineDataBlock.content[ch]
-            ch2 = coarseDataBlock1.content[ch]
+            ch1 = fineDataBlock.getContent(ch)
+            ch2 = coarseDataBlock1.getContent(ch)
             self.assertEqual(fineDataBlock.sizes[ch], len(ch1))
             for i in range(len(ch1)):
                 self.assertEqual(int(ch1[i] / 12), ch2[i])
@@ -111,7 +115,7 @@ class DataBlockTest(unittest.TestCase):
         self.assertEqual(int(fineDataBlock.dataTimeEnd / 24), coarseDataBlock2.dataTimeEnd)
         self.assertEqual(fineDataBlock.sizes, coarseDataBlock2.sizes)
         self.assertEqual(coarseDataBlock2.resolution, 24e-12)
-        self.assertIsNone(coarseDataBlock2.content)
+        self.assertIsNone(coarseDataBlock2.getContent())
 
     def testDataBlockLazyDeserializeAndUnpack(self):
         testDataBlock = DataBlock.generate(
@@ -120,16 +124,28 @@ class DataBlockTest(unittest.TestCase):
         )
         binary = testDataBlock.serialize()
         recoveredDataBlock = DataBlock.deserialize(binary, True)
+        try:
+            recoveredDataBlock.getContent()
+            self.fails()
+        except RuntimeError as e:
+            self.assertEqual(str(e), 'This DataBlock is not unpacked.')
         self.assertDataBlockEqual(testDataBlock, recoveredDataBlock, compareContent=False)
         self.assertIsNone(recoveredDataBlock.content)
         self.assertFalse(recoveredDataBlock.isReleased())
         recoveredDataBlock.unpack()
         recoveredDataBlock.unpack()
+        try:
+            recoveredDataBlock.getContent()
+            self.fails()
+        except RuntimeError as e:
+            self.assertEqual(str(e), 'This DataBlock is not Pythonalized.')
+        recoveredDataBlock.pythonalize()
+        self.assertEqual([len(c) for c in recoveredDataBlock.getContent()], recoveredDataBlock.sizes)
         self.assertFalse(recoveredDataBlock.isReleased())
         recoveredDataBlock2 = DataBlock.deserialize(binary, True)
         recoveredDataBlock2.release()
         recoveredDataBlock2.unpack()
-        self.assertIsNone(recoveredDataBlock2.content)
+        self.assertIsNone(recoveredDataBlock2.getContent())
 
     # def testSyncedDataBlock(self):
     #     testDataBlock = DataBlock.generate(
@@ -234,8 +250,8 @@ class DataBlockTest(unittest.TestCase):
         self.assertEqual(db1.sizes, db2.sizes)
         if compareContent:
             for ch in range(len(db1.sizes)):
-                ch1 = db1.content[ch]
-                ch2 = db2.content[ch]
+                ch1 = db1.getContent(ch)
+                ch2 = db2.getContent(ch)
                 self.assertEqual(db1.sizes[ch], len(ch1))
                 for i in range(len(ch1)):
                     self.assertEqual(ch1[i], ch2[i])

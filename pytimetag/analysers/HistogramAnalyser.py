@@ -77,12 +77,12 @@ class HistogramAnalyser(Analyser):
     viewStop = self.getConfiguration("ViewStop")
     binCount = self.getConfiguration("BinCount")
     divide = self.getConfiguration("Divide")
-    tList = dataBlock.content[syncChannel]
+    tList = dataBlock.getContent(syncChannel)
     viewFrom = viewStart
     viewTo = viewStop
     histograms = []
     for signalChannel in signalChannels:
-      sList = dataBlock.content[signalChannel]
+      sList = dataBlock.getContent(signalChannel)
       histograms.append(analysisJIT(np.array(tList), np.array(sList), viewFrom, viewTo, binCount, divide))
     return {'Histograms': histograms}
 
