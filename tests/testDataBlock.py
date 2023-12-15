@@ -1,7 +1,7 @@
 __author__ = 'Hwaipy'
 
 import unittest
-from pytimetag import DataBlock, DataBlockSerializer, Parallels
+from pytimetag import DataBlock
 import numpy as np
 from random import Random
 
@@ -85,6 +85,20 @@ class DataBlockTest(unittest.TestCase):
     self.assertDataBlockEqual(testDataBlock, recoveredDataBlock, compareContent=False)
     self.assertIsNone(testDataBlock.content)
     self.assertIsNone(recoveredDataBlock.content)
+
+  def testDataBlockSerializationAndDeserializationWithMultiDatablocks(self):
+    testDataBlocks = [DataBlock.generate(
+        {'CreationTime': 100, 'DataTimeBegin': 10, 'DataTimeEnd': 1000000000010},
+        {0: ['Period', 10000], 1: ['Random', 230000], 5: ['Random', 105888], 10: ['Period', 10], 12: ['Random', 1]}
+    ) for i in range(10)]
+    binaries = [testDataBlock.serialize() for testDataBlock in testDataBlocks]
+    binary = b''
+    for b in binaries:
+      binary += b
+    recoveredDataBlocks = DataBlock.deserialize(binary, allowMultiDataBlock=True)
+    self.assertEqual(len(recoveredDataBlocks), len(testDataBlocks))
+    for i in range(len(testDataBlocks)):
+      self.assertDataBlockEqual(testDataBlocks[i], recoveredDataBlocks[i])
 
   def testDataBlockConvertResolution(self):
     fineDataBlock = DataBlock.generate(

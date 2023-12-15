@@ -61,20 +61,23 @@ class DataBlock:
     return dataBlock
 
   @classmethod
-  def deserialize(cls, data, partial=False):
+  def deserialize(cls, data, partial=False, allowMultiDataBlock=False):
     unpacker = msgpack.Unpacker(raw=False)
     unpacker.feed(data)
-    recovered = unpacker.__next__()   # 50 ms
-    protocol = recovered['Format']
-    if protocol != cls.PROTOCOL_V1:
-      raise RuntimeError("Data format not supported: {}".format(recovered("Format")))
-    dataBlock = DataBlock(recovered['CreationTime'], recovered['DataTimeBegin'], recovered['DataTimeEnd'], recovered['Sizes'], recovered['Resolution'])
-    dataBlock.__binaryRef = recovered['Content']
-    if recovered.__contains__('ContentSerializedSizeSugggestion'):
-      dataBlock.__binaryRefSizes = recovered['ContentSerializedSizeSugggestion']
-    if not partial:
-      dataBlock.unpack()    #     220 ms
-    return dataBlock
+    results = []
+    for recovered in unpacker:
+      protocol = recovered['Format']
+      if protocol != cls.PROTOCOL_V1:
+        raise RuntimeError("Data format not supported: {}".format(recovered("Format")))
+      dataBlock = DataBlock(recovered['CreationTime'], recovered['DataTimeBegin'], recovered['DataTimeEnd'], recovered['Sizes'], recovered['Resolution'])
+      dataBlock.__binaryRef = recovered['Content']
+      if recovered.__contains__('ContentSerializedSizeSugggestion'):
+        dataBlock.__binaryRefSizes = recovered['ContentSerializedSizeSugggestion']
+      if not partial:
+        dataBlock.unpack()    #     220 ms
+      if not allowMultiDataBlock: return dataBlock
+      results.append(dataBlock)
+    return results
 
   def __init__(self, creationTime, dataTimeBegin, dataTimeEnd, sizes, resolution=1e-12):
     self.creationTime = creationTime

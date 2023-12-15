@@ -1,13 +1,13 @@
 __author__ = 'Hwaipy'
 
 import unittest
-from pytimetag import DataBlock, DataBlockSerializer, Validator, CounterAnalyser, HistogramAnalyser, EncodingAnalyser, FastCounterAnalyser
+from pytimetag import DataBlock, Validator, CounterAnalyser, HistogramAnalyser, EncodingAnalyser, FastCounterAnalyser
 from random import Random
 import numpy as np
 import msgpack
 
 
-class DataBlockTest(unittest.TestCase):
+class AnalyserTest(unittest.TestCase):
   rnd = Random()
 
   @classmethod
