@@ -1,18 +1,20 @@
-from pytimetag import DataBlock, HistogramAnalyser
+from pytimetag import DataBlock, HistogramAnalyser, EncodingAnalyser, Parallels
 import time
+import numpy as np
+import numba
 
 if __name__ == '__main__':
   UNIT_SIZE = 20
+  numba.set_num_threads(10)
 
   def run():
     print("\n ******** Start BenchMarking ******** \n")
-
     # benchMarkingSerDeser()
     benchMarkingMultiHistogramAnalyser()
+    # benchMarkingEncodingAnalyser()
 #     // doBenchMarkingSyncedDataBlock()
 #     // doBenchMarkingMultiHistogramAnalyser()
 #     // doBenchMarkingExceptionMonitorAnalyser()
-#     // doBenchMarkingEncodingAnalyser()
 #   }
 
   def benchMarkingSerDeser():
@@ -37,30 +39,54 @@ if __name__ == '__main__':
     data = testDataBlock.serialize()
     recovered = DataBlock.deserialize(data)
     consumingSerialization = doBenchMarkingOpertion(lambda: testDataBlock.serialize())
-    infoRate = len(data) / sum([len(ch) for ch in testDataBlock.getContent()])
+    infoRate = len(data) / sum([len(ch) for ch in testDataBlock.content])
     consumingDeserialization = doBenchMarkingOpertion(lambda: DataBlock.deserialize(data))
     return (infoRate, consumingSerialization, consumingDeserialization)
 
   def benchMarkingMultiHistogramAnalyser():
     rt = ReportTable('MultiHistogramAnalyser', ("Total Event Size", "1 Ch", "2 Ch (1, 1)", "4 Ch (5, 3, 1, 1)")).setFormatter(0, formatterKMG).setFormatter(1, lambda second: f"{(second * 1000):.2f} ms").setFormatter(2, lambda second: f"{(second * 1000):.2f} ms").setFormatter(3, lambda second: f"{(second * 1000):.2f} ms")
-    # for r in [10000, 100000, 1000000, 4000000]:
-    for r in [4000000]:
+    for r in [10000, 100000, 1000000, 4000000, 10000000]:
       bm = doBenchMarkingMultiHistogramAnalyser(r, [[1], [1, 1], [5, 3, 1, 1]])
       rt.addRow(r, bm[0], bm[1], bm[2])
     rt.output()
 
   def doBenchMarkingMultiHistogramAnalyser(totalSize, sizes):
     mha = HistogramAnalyser(16)
-    mha.turnOn({"Sync": 0, "Signals": [1], "ViewStart": -1000000, "ViewStop": 1000000, "BinCount": 100, "Divide": 100})
+    mha.turnOn({"Sync": 0, "Signals": [1], "ViewStart": 0, "ViewStop": 40000000, "BinCount": 1000, "Divide": 1})
     bm = []
     for size in sizes:
       m = {}
       for s in range(len(size) + 1):
         if s == 0:
-          m[s] = ["Period", 10000]
+          m[s] = ["Period", 25000]
         else:
           m[s] = ["Pulse", 100000000, int(size[s - 1] / sum(size) * totalSize), 1000]
       dataBlock = DataBlock.generate({"CreationTime": 100, "DataTimeBegin": 0, "DataTimeEnd": 1000000000000}, m)
+      mha.turnOn({"Signals": [i + 1 for i in range(len(size))]})
+      bm.append(doBenchMarkingOpertion(lambda: mha.dataIncome(dataBlock)))
+    return bm
+
+  def benchMarkingEncodingAnalyser():
+    rt = ReportTable('Encoding Analyser', ("Total Event Size", "RN (8)", "RN (32)", "RN (128)")).setFormatter(0, formatterKMG).setFormatter(1, lambda second: f"{(second * 1000):.2f} ms").setFormatter(2, lambda second: f"{(second * 1000):.2f} ms").setFormatter(3, lambda second: f"{(second * 1000):.2f} ms")
+    for r in [10000, 100000, 1000000, 4000000, 10000000]:
+      bm = doBenchMarkingEncodingAnalyser(r, [8, 32, 128], [8, 32, 128])
+      rt.addRow(r, bm[0], bm[1], bm[2])
+    rt.output()
+
+    rt = ReportTable('Encoding Analyser (Long RandomNumber)', ("Total Event Size", "RN (8)", "RN (32)", "RN (128)")).setFormatter(0, formatterKMG).setFormatter(1, lambda second: f"{(second * 1000):.2f} ms").setFormatter(2, lambda second: f"{(second * 1000):.2f} ms").setFormatter(3, lambda second: f"{(second * 1000):.2f} ms")
+    for r in [10000, 100000, 1000000, 4000000, 10000000]:
+      bm = doBenchMarkingEncodingAnalyser(r, [8, 32, 128], [20000000] * 3)
+      rt.addRow(r, bm[0], bm[1], bm[2])
+    rt.output()
+
+  def doBenchMarkingEncodingAnalyser(totalSize, rnLimits, rnLengths):
+    bm = []
+    for i in range(len(rnLimits)):
+      rnLimit = rnLimits[i]
+      rnLength = rnLengths[i]
+      mha = EncodingAnalyser(16, rnLimit)
+      mha.turnOn({"Period": 10000, "TriggerChannel": 0, "SignalChannel": 1, "RandomNumbers": np.linspace(0, rnLength - 1, rnLength, dtype='<i4') % rnLimit})
+      dataBlock = DataBlock.generate({"CreationTime": 100, "DataTimeBegin": 0, "DataTimeEnd": 1000000000000}, {0: ["Period", 10000], 1: ["Pulse", 100000000, totalSize, 100]})
       bm.append(doBenchMarkingOpertion(lambda: mha.dataIncome(dataBlock)))
     return bm
 
@@ -280,28 +306,6 @@ if __name__ == '__main__':
 #     })
 #   }
 
-#   private def doBenchMarkingEncodingAnalyser(): Unit = {
-#     val rt = ReportTable(s"Encoding Analyser", List("Total Event Size", "RN (8)", "RN (32)", "RN (128)"))
-#       .setFormatter(0, formatterKMG)
-#       .setFormatter(1, (second) => f"${second.asInstanceOf[Double] * 1000}%.2f ms")
-#       .setFormatter(2, (second) => f"${second.asInstanceOf[Double] * 1000}%.2f ms")
-#       .setFormatter(3, (second) => f"${second.asInstanceOf[Double] * 1000}%.2f ms")
-#     List(10000, 100000, 1000000, 4000000, 10000000).foreach(r => {
-#       val bm = doBenchMarkingEncodingAnalyser(r, List(8, 32, 128))
-#       rt.addRow(r, bm(0), bm(1), bm(2))
-#     })
-#     rt.output()
-#   }
-
-#   private def doBenchMarkingEncodingAnalyser(totalSize: Int, rnLimits: List[Int]): List[Double] = {
-#     rnLimits.map(rnLimit => {
-#       val mha = new EncodingAnalyser(16, rnLimit)
-#       mha.turnOn(Map("Period" -> 10000, "TriggerChannel" -> 0, "SignalChannel" -> 1, "RandomNumbers" -> Range(0, rnLimit).toList))
-#       val dataBlock = DataBlock.generate(Map("CreationTime" -> 100, "DataTimeBegin" -> 0L, "DataTimeEnd" -> 1000000000000L), Map(0 -> List("Period", 10000), 1 -> List("Pulse", 100000000, totalSize, 100)))
-#       doBenchMarkingOpertion(() => mha.dataIncome(dataBlock))
-#     })
-#   }
-
 #   private def doBenchMarkingOpertion(operation: () => Unit) = {
 #     val stop = System.nanoTime() + 1000000000
 #     val count = new AtomicInteger(0)
@@ -397,69 +401,68 @@ if __name__ == '__main__':
 
 
 
-### 2023-01-14
+### 2023-01-17
+# 
 # +-----------------------------------------------------------------------------------+
 # |                      DataBlock serial/deserial: Period List                       |
 # +-----------------------------------------------------------------------------------+
 # |     Event Size     |     Data Rate      |    Serial Time     |   Deserial Time    |
-# |       10.0 K       |        4.02        |      0.51 ms       |      0.24 ms       |
-# |      0.100 M       |        4.00        |      4.48 ms       |      2.20 ms       |
-# |       1.00 M       |        3.50        |      39.43 ms      |      35.25 ms      |
-# |       4.00 M       |        3.00        |     153.41 ms      |     131.00 ms      |
-# |       10.0 M       |        3.00        |     371.63 ms      |     311.18 ms      |
+# |       10.0 K       |        4.02        |      0.23 ms       |      0.22 ms       |
+# |      0.100 M       |        4.00        |      2.34 ms       |      1.84 ms       |
+# |       1.00 M       |        3.50        |      20.60 ms      |      20.52 ms      |
+# |       4.00 M       |        3.00        |      66.53 ms      |      72.75 ms      |
+# |       10.0 M       |        3.00        |     192.85 ms      |     197.78 ms      |
 # +-----------------------------------------------------------------------------------+
 # +-----------------------------------------------------------------------------------+
 # |                   DataBlock serial/deserial: Period List, 16 ps                   |
 # +-----------------------------------------------------------------------------------+
 # |     Event Size     |     Data Rate      |    Serial Time     |   Deserial Time    |
-# |       10.0 K       |        3.52        |      0.39 ms       |      0.21 ms       |
-# |      0.100 M       |        3.50        |      4.27 ms       |      2.05 ms       |
-# |       1.00 M       |        3.00        |      36.39 ms      |      19.85 ms      |
-# |       4.00 M       |        2.50        |     114.50 ms      |      74.60 ms      |
-# |       10.0 M       |        2.50        |     309.95 ms      |     270.17 ms      |
+# |       10.0 K       |        3.52        |      0.19 ms       |      0.20 ms       |
+# |      0.100 M       |        3.50        |      1.89 ms       |      1.62 ms       |
+# |       1.00 M       |        3.00        |      16.56 ms      |      14.76 ms      |
+# |       4.00 M       |        2.50        |      57.45 ms      |      63.33 ms      |
+# |       10.0 M       |        2.50        |     161.39 ms      |     173.78 ms      |
 # +-----------------------------------------------------------------------------------+
 # +-----------------------------------------------------------------------------------+
 # |                      DataBlock serial/deserial: Random List                       |
 # +-----------------------------------------------------------------------------------+
 # |     Event Size     |     Data Rate      |    Serial Time     |   Deserial Time    |
-# |       10.0 K       |        4.09        |      0.45 ms       |      0.25 ms       |
-# |      0.100 M       |        3.84        |      4.49 ms       |      2.49 ms       |
-# |       1.00 M       |        3.46        |      44.64 ms      |      23.93 ms      |
-# |       4.00 M       |        3.00        |     135.44 ms      |      84.71 ms      |
-# |       10.0 M       |        2.99        |     371.57 ms      |     323.00 ms      |
+# |       10.0 K       |        4.09        |      0.27 ms       |      0.23 ms       |
+# |      0.100 M       |        3.84        |      2.73 ms       |      2.02 ms       |
+# |       1.00 M       |        3.46        |      27.84 ms      |      17.93 ms      |
+# |       4.00 M       |        3.00        |      67.95 ms      |      72.18 ms      |
+# |       10.0 M       |        2.99        |     223.87 ms      |     203.55 ms      |
 # +-----------------------------------------------------------------------------------+
 # +-----------------------------------------------------------------------------------+
 # |                   DataBlock serial/deserial: Random List, 16 ps                   |
 # +-----------------------------------------------------------------------------------+
 # |     Event Size     |     Data Rate      |    Serial Time     |   Deserial Time    |
-# |       10.0 K       |        3.59        |      0.41 ms       |      0.23 ms       |
-# |      0.100 M       |        3.34        |      4.05 ms       |      2.22 ms       |
-# |       1.00 M       |        2.96        |      39.84 ms      |      20.07 ms      |
-# |       4.00 M       |        2.50        |     115.15 ms      |      73.72 ms      |
-# |       10.0 M       |        2.49        |     322.65 ms      |     277.95 ms      |
+# |       10.0 K       |        3.59        |      0.23 ms       |      0.22 ms       |
+# |      0.100 M       |        3.34        |      2.47 ms       |      1.87 ms       |
+# |       1.00 M       |        2.96        |      25.44 ms      |      15.26 ms      |
+# |       4.00 M       |        2.50        |      60.71 ms      |      64.85 ms      |
+# |       10.0 M       |        2.49        |     194.03 ms      |     175.51 ms      |
 # +-----------------------------------------------------------------------------------+
 # +-----------------------------------------------------------------------------------+
 # |                       DataBlock serial/deserial: Mixed List                       |
 # +-----------------------------------------------------------------------------------+
 # |     Event Size     |     Data Rate      |    Serial Time     |   Deserial Time    |
-# |       10.0 K       |        4.47        |      0.54 ms       |      0.27 ms       |
-# |      0.100 M       |        3.99        |      4.42 ms       |      2.22 ms       |
-# |       1.00 M       |        3.55        |      39.88 ms      |      22.15 ms      |
-# |       4.00 M       |        3.30        |     171.56 ms      |     104.28 ms      |
-# |       10.0 M       |        3.05        |     374.78 ms      |     251.79 ms      |
+# |       10.0 K       |        4.46        |      0.33 ms       |      0.25 ms       |
+# |      0.100 M       |        3.99        |      2.63 ms       |      1.86 ms       |
+# |       1.00 M       |        3.55        |      21.01 ms      |      17.55 ms      |
+# |       4.00 M       |        3.30        |     100.42 ms      |      80.10 ms      |
+# |       10.0 M       |        3.05        |     194.05 ms      |     198.66 ms      |
 # +-----------------------------------------------------------------------------------+
 # +-----------------------------------------------------------------------------------+
 # |                   DataBlock serial/deserial: Mixed List, 16 ps                    |
 # +-----------------------------------------------------------------------------------+
 # |     Event Size     |     Data Rate      |    Serial Time     |   Deserial Time    |
-# |       10.0 K       |        3.96        |      0.47 ms       |      0.27 ms       |
-# |      0.100 M       |        3.49        |      4.14 ms       |      1.99 ms       |
-# |       1.00 M       |        3.05        |      35.32 ms      |      18.83 ms      |
-# |       4.00 M       |        2.80        |     152.00 ms      |      95.42 ms      |
-# |       10.0 M       |        2.55        |     359.98 ms      |     223.55 ms      |
+# |       10.0 K       |        3.96        |      0.30 ms       |      0.23 ms       |
+# |      0.100 M       |        3.49        |      2.29 ms       |      1.65 ms       |
+# |       1.00 M       |        3.05        |      17.59 ms      |      14.93 ms      |
+# |       4.00 M       |        2.80        |      89.44 ms      |      69.67 ms      |
+# |       10.0 M       |        2.55        |     168.39 ms      |     173.34 ms      |
 # +-----------------------------------------------------------------------------------+
-# 
-# 
 # 
 # 
 # 

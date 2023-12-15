@@ -8,7 +8,7 @@ import numpy as np
 
 
 class HistogramAnalyser(Analyser):
-  def __init__(self, channelCount):
+  def __init__(self, channelCount): 
     super().__init__()
     self.channelCount = channelCount
     self.setConfiguration("Sync", 0, Validator.int(0, channelCount - 1))
@@ -19,8 +19,6 @@ class HistogramAnalyser(Analyser):
     self.setConfiguration("Divide", 1, Validator.int(min=1))
 
   def analysis(self, dataBlock):
-    # if True:
-    #   return self.analysisJIT(dataBlock)
     syncChannel = self.getConfiguration("Sync")
     signalChannels = self.getConfiguration("Signals")
     viewStart = self.getConfiguration("ViewStart")
@@ -28,70 +26,28 @@ class HistogramAnalyser(Analyser):
     binCount = self.getConfiguration("BinCount")
     divide = self.getConfiguration("Divide")
     tList = dataBlock.content[syncChannel]
-    print(tList)
-    # viewFrom = viewStart
-    # viewTo = viewStop
-    # histograms = []
-    # for signalChannel in signalChannels:
-    #   deltas = []
-    #   sList = dataBlock.content[signalChannel]
-    #   if len(tList) > 0 and len(sList) > 0:
-    #     preStartT = 0
-    #     lengthT = len(tList)
-    #     sp = 0
-    #     while sp < len(sList):
-    #       s = sList[sp]
-    #       cont = True
-    #       while (preStartT < lengthT and cont):
-    #         t = tList[preStartT]
-    #         delta = s - t
-    #         if (delta > viewTo):
-    #           preStartT += 1
-    #         else:
-    #           cont = False
-    #       tIndex = preStartT
-    #       cont = True
-    #       while (tIndex < lengthT and cont):
-    #         t = tList[tIndex]
-    #         delta = s - t
-    #         if (delta > viewFrom):
-    #           deltas.append(delta)
-    #           tIndex += 1
-    #         else:
-    #           cont = False
-    #       sp += 1
-    #   histograms.append(Histogram(deltas, binCount, viewFrom, viewTo, divide).yData)
-    # return {'Histograms': histograms}
-    return {}
-
-  def dataIncomeJIT(self, dataBlock):
-    if self.on:
-      result = self.analysisJIT(dataBlock)
-      result['Configuration'] = self.getConfigurations()
-      return result
-    else:
-      return None
-
-  def analysisJIT(self, dataBlock):
-    syncChannel = self.getConfiguration("Sync")
-    signalChannels = self.getConfiguration("Signals")
-    viewStart = self.getConfiguration("ViewStart")
-    viewStop = self.getConfiguration("ViewStop")
-    binCount = self.getConfiguration("BinCount")
-    divide = self.getConfiguration("Divide")
-    tList = dataBlock.getContent(syncChannel)
     viewFrom = viewStart
     viewTo = viewStop
-    histograms = []
-    for signalChannel in signalChannels:
-      sList = dataBlock.getContent(signalChannel)
-      histograms.append(analysisJIT(np.array(tList), np.array(sList), viewFrom, viewTo, binCount, divide))
-    return {'Histograms': histograms}
 
+    triggerTooMuch = (len(tList) * (viewStop - viewStart) / (dataBlock.dataTimeEnd - dataBlock.dataTimeBegin)) > 100 # check if there is too much trigger
+    if triggerTooMuch:
+      histograms = [np.ones(binCount, dtype='<i8') * -1 for signalChannel in signalChannels]
+    else:
+      sLists = numba.typed.List([dataBlock.content[signalChannel] for signalChannel in signalChannels])
+      histograms = analysisJIT(tList, sLists, viewFrom, viewTo, binCount, divide)
+    return {'Histograms': [list([int(i) for i in h]) for h in histograms]}
+
+@numba.njit(parallel=False)
+def analysisJIT(tList, sLists, viewFrom, viewTo, binCount, divide):
+  histograms = [np.zeros(0, dtype='<i4') for s in sLists]
+  for i in numba.prange(len(sLists)):
+    histograms[i] = analysisOneListJIT(tList, sLists[i], viewFrom, viewTo, binCount, divide)
+  return histograms
 
 @numba.njit
-def analysisJIT(tList, sList, viewFrom, viewTo, binCount, divide):
-  deltas = [0]
+def analysisOneListJIT(tList, sList, viewFrom, viewTo, binCount, divide):
+  binSize = (viewTo - viewFrom) / binCount / divide
+  yData = np.zeros(binCount, dtype='<i4')
   if len(tList) > 0 and len(sList) > 0:
     preStartT = 0
     lengthT = len(tList)
@@ -111,95 +67,37 @@ def analysisJIT(tList, sList, viewFrom, viewTo, binCount, divide):
       while (tIndex < lengthT and cont):
         t = tList[tIndex]
         delta = s - t
-        if (delta > viewFrom):
-          deltas.append(delta)
+        if (delta >= viewFrom):
+          if delta == viewTo:
+            yData[binCount - 1] += 1
+          elif delta < viewTo:
+            bin = int((delta - viewFrom) / binSize) % binCount
+            yData[bin] += 1
           tIndex += 1
         else:
           cont = False
       sp += 1
-  min = float(viewFrom)
-  max = float(viewTo)
-  binSize = (max - min) / binCount / divide
-  xData = [(i * binSize + min) + binSize / 2 for i in range(binCount)]
-  yData = [0] * binCount
-  dp = 0
-  while dp < len(deltas):
-    delta = deltas[dp]
-    deltaDouble = float(delta)
-    if deltaDouble < min:
-      pass
-      # /* this data is smaller than min */
-    elif deltaDouble == max:
-      #  // the value falls exactly on the max value
-      yData[binCount - 1] += 1
-    elif deltaDouble > max:
-      pass
-      # /* this data point is bigger than max */
-    else:
-      bin = int((deltaDouble - min) / binSize) % binCount
-      yData[bin] += 1
-    dp += 1
+
   return yData
-
-
-class Histogram:
-  def __init__(self, deltas, binCount, viewFrom, viewTo, divide):
-    self.deltas = deltas
-    self.binCount = binCount
-    self.min = float(viewFrom)
-    self.max = float(viewTo)
-    self.divide = divide
-    self.binSize = (self.max - self.min) / self.binCount / self.divide
-    self.xData = [(i * self.binSize + self.min) + self.binSize / 2 for i in range(self.binCount)]
-    self.yData = [0] * self.binCount
-    self.__initData()
-
-  def __initData(self):
-    dp = 0
-    while dp < len(self.deltas):
-      delta = self.deltas[dp]
-      deltaDouble = float(delta)
-      if deltaDouble < self.min:
-        pass
-        # /* this data is smaller than min */
-      elif deltaDouble == self.max:
-        #  // the value falls exactly on the max value
-        self.yData[self.binCount - 1] += 1
-      elif deltaDouble > self.max:
-        pass
-        # /* this data point is bigger than max */
-      else:
-        bin = int((deltaDouble - self.min) / self.binSize) % self.binCount
-        self.yData[bin] += 1
-      dp += 1
 
 
 if __name__ == '__main__':
   from pytimetag.datablock import DataBlock
   from pytimetag.analysers.HistogramAnalyser import HistogramAnalyser
   import time
+
   dataBlock = DataBlock.generate(
-      {'CreationTime': 100, 'DataTimeBegin': 10, 'DataTimeEnd': 1000000000010},
-      {0: ['Period', 10000], 1: ["Pulse", 100000000, 4000000, 1000]},
-      seDer=True
+      {'CreationTime': 100, 'DataTimeBegin': 0, 'DataTimeEnd': 1000000000000}, 
+      {0: ['Period', 25000], 2: ['Pulse', 100000000, 1000000, 100], 3: ['Pulse', 100000000, 1000000, 100], 4: ['Pulse', 100000000, 1000000, 100]}
   )
   mha = HistogramAnalyser(16)
-  mha.turnOn({'Sync': 0, 'Signals': [1]})
-  t1 = time.time()
-  r1 = mha.dataIncome(dataBlock)
-  t2 = time.time()
-  r2 = mha.dataIncomeJIT(dataBlock)
-  t3 = time.time()
-  r2 = mha.dataIncomeJIT(dataBlock)
-  t4 = time.time()
-  print(t2 - t1, t4 - t3)
-  # print(r1 == r2)
-  # print(r1['Configuration'] == r2['Configuration'])
+  mha.turnOn({"Sync": 0, "Signals": [2, 3, 4], "ViewStart": 0, "ViewStop": 400000000, "BinCount": 100, "Divide": 1})
 
-  # l1 = r1['Histograms'][0]
-  # l2 = r1['Histograms'][0]
-  # assert(len(l1) == len(l2))
-  # for i in range(len(l1)):
-  #     if l1[i] != l2[i]:
-  #         print(i, l1[i], l2[i])
-  #         break
+  mha.dataIncome(dataBlock)
+  t1 = time.time()
+  result = mha.dataIncome(dataBlock)
+  t2 = time.time()
+  result = mha.dataIncome(dataBlock)
+  t3 = time.time()
+  histos = result['Histograms']
+  print((t2 - t1) * 1000, (t3 - t2) * 1000)
