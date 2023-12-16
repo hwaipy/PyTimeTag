@@ -109,7 +109,7 @@ def deltaMeta(triggerList, signalList, period):
 #       metaDeltas[iSignal] = int(signalTime - currentTrigger - period * pulseIndex)
 #     return (metaRNs, metaDeltas)
 
-# @numba.njit
+# @numba.njit(cache=True)
 # def metaJIT(triggerList, signalList, period, randomNumbers, pulsePerTrigger):
 #   currentTrigger = triggerList[0]
 #   nextTrigger = triggerList[1]
@@ -129,7 +129,7 @@ def deltaMeta(triggerList, signalList, period):
 #     metaDeltas[iSignal] = int(signalTime - currentTrigger - period * pulseIndex)
 #   return (metaRNs, metaDeltas)
 
-# @numba.njit
+# @numba.njit(cache=True)
 # def statisticHistogramsJIT(metaRNs, metaDeltas, viewFrom, viewTo, binCount, randomNumberLimit):
 #   results = [np.zeros(binCount, dtype='<i4') for rn in range(randomNumberLimit)]
 #   binSize = (viewTo - viewFrom) / binCount
@@ -144,7 +144,7 @@ def deltaMeta(triggerList, signalList, period):
 #         results[rn][bin] += 1
 #   return results
 
-# @numba.njit
+# @numba.njit(cache=True)
 # def statisticRandomNumbersJIT(randomNumberLimit, randomNumbers):
 #   rnCounts = np.zeros(randomNumberLimit, dtype='<i4')
 #   for rn in randomNumbers:

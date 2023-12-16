@@ -90,7 +90,7 @@ class DataBlockTest(unittest.TestCase):
     testDataBlocks = [DataBlock.generate(
         {'CreationTime': 100, 'DataTimeBegin': 10, 'DataTimeEnd': 1000000000010},
         {0: ['Period', 10000], 1: ['Random', 230000], 5: ['Random', 105888], 10: ['Period', 10], 12: ['Random', 1]}
-    ) for i in range(10)]
+    ) for i in range(100)]
     binaries = [testDataBlock.serialize() for testDataBlock in testDataBlocks]
     binary = b''
     for b in binaries:

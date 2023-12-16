@@ -2,7 +2,7 @@ import setuptools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
-version = '2.0.2'
+version = '2.1.3'
 
 setuptools.setup(
     name='pytimetag',
@@ -32,5 +32,5 @@ setuptools.setup(
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.8',
 )

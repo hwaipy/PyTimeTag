@@ -29,7 +29,7 @@ class FastCounterAnalyser(Analyser):
       counts[str(channel)] = [int(c) for c in fastCountJIT(dataBlock.content[channel], frequency, dataBlock.dataTimeBegin, dataBlock.dataTimeEnd)]
     return {'CountSections': counts}
 
-@numba.njit
+@numba.njit(cache=True)
 def fastCountJIT(signalList, frequency, dataTimeBegin, dataTimeEnd):
   result = np.zeros(int(frequency), dtype='<i4')
   sectionIndices = ((signalList - dataTimeBegin) / (dataTimeEnd - dataTimeBegin) * frequency).astype('<i4')

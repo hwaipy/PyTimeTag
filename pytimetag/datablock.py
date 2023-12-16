@@ -9,8 +9,8 @@ import msgpack
 import numpy as np
 from pytimetag.datablockserialJIT import serializeJIT, deserializeJIT
 import numba
-from multiprocessing.shared_memory import SharedMemory
-from datetime import datetime
+# from multiprocessing.shared_memory import SharedMemory
+# from datetime import datetime
 
 class DataBlock:
   FINENESS = 100000
@@ -62,7 +62,7 @@ class DataBlock:
 
   @classmethod
   def deserialize(cls, data, partial=False, allowMultiDataBlock=False):
-    unpacker = msgpack.Unpacker(raw=False)
+    unpacker = msgpack.Unpacker(raw=False, max_buffer_size=0)
     unpacker.feed(data)
     results = []
     for recovered in unpacker:
@@ -131,18 +131,18 @@ class DataBlock:
     sDB.content = [self.content[i] + delays[i] for i in range(len(self.content))]
     return sDB
 
-  def sharedMemory(self):
-    sDB = DataBlockSharedMemory(self.creationTime, self.dataTimeBegin, self.dataTimeEnd, self.sizes, self.resolution)
-    sDB.smContent = []
-    for content in self.content:
-      if len(content) == 0:
-        sDB.smContent.append(None)
-      else:
-        sm = SharedMemory(create=True, size=content.nbytes)
-        cpArray = np.ndarray(content.shape, dtype=content.dtype, buffer=sm.buf)
-        cpArray[:] = content[:]
-        sDB.smContent.append(sm)
-    return sDB
+  # def sharedMemory(self):
+  #   sDB = DataBlockSharedMemory(self.creationTime, self.dataTimeBegin, self.dataTimeEnd, self.sizes, self.resolution)
+  #   sDB.smContent = []
+  #   for content in self.content:
+  #     if len(content) == 0:
+  #       sDB.smContent.append(None)
+  #     else:
+  #       sm = SharedMemory(create=True, size=content.nbytes)
+  #       cpArray = np.ndarray(content.shape, dtype=content.dtype, buffer=sm.buf)
+  #       cpArray[:] = content[:]
+  #       sDB.smContent.append(sm)
+  #   return sDB
 
   def unpack(self):
     if self.__binaryRef:
@@ -155,23 +155,23 @@ class DataBlock:
       self.content = DataBlockSerializer.instance(DataBlock.PROTOCOL_V1).deserialize(self.__binaryRef)
       self.__binaryRef = None
 
-class DataBlockSharedMemory(DataBlock):
-  def __init__(self, creationTime, dataTimeBegin, dataTimeEnd, sizes, resolution=1e-12):
-    super().__init__(creationTime, dataTimeBegin, dataTimeEnd, sizes, resolution)
-    self.smContent = None
+# class DataBlockSharedMemory(DataBlock):
+#   def __init__(self, creationTime, dataTimeBegin, dataTimeEnd, sizes, resolution=1e-12):
+#     super().__init__(creationTime, dataTimeBegin, dataTimeEnd, sizes, resolution)
+#     self.smContent = None
 
-  def __getattribute__(self, name):
-    if name == 'content':
-      contents = []
-      for smContent in self.smContent:
-        if smContent: contents.append(np.ndarray(int(smContent.size / 8), dtype='<i8', buffer=smContent.buf))
-        else: contents.append(np.ndarray(0, dtype='<i8'))
-      return contents
-    return super().__getattribute__(name)
+#   def __getattribute__(self, name):
+#     if name == 'content':
+#       contents = []
+#       for smContent in self.smContent:
+#         if smContent: contents.append(np.ndarray(int(smContent.size / 8), dtype='<i8', buffer=smContent.buf))
+#         else: contents.append(np.ndarray(0, dtype='<i8'))
+#       return contents
+#     return super().__getattribute__(name)
 
-  def release(self):
-    for smContent in self.smContent:
-      if smContent: smContent.unlink()
+#   def release(self):
+#     for smContent in self.smContent:
+#       if smContent: smContent.unlink()
 
 class DataBlockSerializer:
   class DataBlockSerializerImp:

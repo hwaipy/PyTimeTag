@@ -37,14 +37,14 @@ class HistogramAnalyser(Analyser):
       histograms = analysisJIT(tList, sLists, viewFrom, viewTo, binCount, divide)
     return {'Histograms': [list([int(i) for i in h]) for h in histograms]}
 
-@numba.njit(parallel=False)
+@numba.njit(parallel=False, cache=True)
 def analysisJIT(tList, sLists, viewFrom, viewTo, binCount, divide):
   histograms = [np.zeros(0, dtype='<i4') for s in sLists]
   for i in numba.prange(len(sLists)):
     histograms[i] = analysisOneListJIT(tList, sLists[i], viewFrom, viewTo, binCount, divide)
   return histograms
 
-@numba.njit
+@numba.njit(cache=True)
 def analysisOneListJIT(tList, sList, viewFrom, viewTo, binCount, divide):
   binSize = (viewTo - viewFrom) / binCount / divide
   yData = np.zeros(binCount, dtype='<i4')

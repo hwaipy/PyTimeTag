@@ -2,7 +2,7 @@ import numba
 import numpy as np
 
 
-@numba.njit(parallel=True)
+@numba.njit(parallel=True, cache=True)
 def serializeJIT(contents, fineness):
   serializedContent = [[np.zeros(0, dtype='int8')] for ch in range(len(contents))]
   sizeSuggestion = [[0] for ch in range(len(contents))]
@@ -27,7 +27,7 @@ def serializeJIT(contents, fineness):
   return serializedContent, sizeSuggestion
 
 
-# @numba.njit(parallel=True)
+# @numba.njit(parallel=True, cache=True)
 # def serializeJIT(data, fineness):
 #   sectionNum = int(np.ceil(len(data) / fineness))
 #   result = [np.zeros(0, dtype='int8') for i in range(sectionNum)]
@@ -41,7 +41,7 @@ def serializeJIT(contents, fineness):
 #     result[i] = buffer
 #   return result, sizes
 
-@numba.njit
+@numba.njit(cache=True)
 def serializeSectionJIT(data, begin, end):
   head = data[begin]
   buffer = np.zeros((end - begin) * 8, dtype='int8')
@@ -84,7 +84,7 @@ def serializeSectionJIT(data, begin, end):
   return buffer[:pBuffer]
 
 
-@numba.njit(parallel=True)
+@numba.njit(parallel=True, cache=True)
 def deserializeJIT(contents):
   result = [np.zeros(0, dtype='<i8') for i in range(len(contents))]
   for i in numba.prange(len(contents)):
@@ -97,7 +97,7 @@ def deserializeJIT(contents):
     result[i] = buffer[:pBuffer]
   return result
 
-@numba.njit
+@numba.njit(cache=True)
 def deserializeSectionJIT(data, buffer, pBuffer):
   if len(data) > 0:
     offset = 0
