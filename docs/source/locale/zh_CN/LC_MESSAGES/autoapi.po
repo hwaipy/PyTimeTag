@@ -1,0 +1,367 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024, Hwaipy
+# This file is distributed under the same license as the PyTimeTag package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2024.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PyTimeTag 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-06-21 09:38+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.15.0\n"
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:2
+msgid "CounterAnalyser"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:8
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:8
+#: ../../source/autoapi/EncodingAnalyser/index.rst:8
+#: ../../source/autoapi/HistogramAnalyser/index.rst:8
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:8
+#: ../../source/autoapi/pytimetag/BenchMarker/index.rst:8
+#: ../../source/autoapi/pytimetag/datablock/index.rst:8
+#: ../../source/autoapi/pytimetag/index.rst:20
+msgid "Attributes"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:16:<autosummary>:1
+msgid ":py:obj:`__license__ <CounterAnalyser.__license__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:16:<autosummary>:1
+msgid ":py:obj:`__author__ <CounterAnalyser.__author__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:16:<autosummary>:1
+msgid ":py:obj:`__email__ <CounterAnalyser.__email__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:18
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:19
+#: ../../source/autoapi/EncodingAnalyser/index.rst:19
+#: ../../source/autoapi/HistogramAnalyser/index.rst:19
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:18
+#: ../../source/autoapi/pytimetag/datablock/index.rst:19
+#: ../../source/autoapi/pytimetag/index.rst:30
+msgid "Classes"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:25:<autosummary>:1
+msgid ":py:obj:`CounterAnalyser <CounterAnalyser.CounterAnalyser>`\\"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:25:<autosummary>:1
+msgid ":py:obj:`FastCounterAnalyser <CounterAnalyser.FastCounterAnalyser>`\\"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:27
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:27
+#: ../../source/autoapi/EncodingAnalyser/index.rst:27
+#: ../../source/autoapi/HistogramAnalyser/index.rst:27
+#: ../../source/autoapi/pytimetag/datablock/index.rst:28
+#: ../../source/autoapi/pytimetag/datablockserialJIT/index.rst:8
+msgid "Functions"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:33:<autosummary>:1
+msgid ""
+":py:obj:`fastCountJIT <CounterAnalyser.fastCountJIT>`\\ \\(signalList\\, "
+"frequency\\, dataTimeBegin\\, ...\\)"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:35
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:35
+#: ../../source/autoapi/EncodingAnalyser/index.rst:37
+#: ../../source/autoapi/HistogramAnalyser/index.rst:36
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:27
+#: ../../source/autoapi/pytimetag/BenchMarker/index.rst:16
+#: ../../source/autoapi/pytimetag/datablock/index.rst:36
+#: ../../source/autoapi/pytimetag/datablockserialJIT/index.rst:19
+msgid "Module Contents"
+msgstr ""
+
+#: ../../source/autoapi/CounterAnalyser/index.rst:51
+#: ../../source/autoapi/CounterAnalyser/index.rst:59
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:51
+#: ../../source/autoapi/EncodingAnalyser/index.rst:53
+#: ../../source/autoapi/HistogramAnalyser/index.rst:52
+msgid "Bases: :py:obj:`pytimetag.Analyser.Analyser`"
+msgstr ""
+
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:2
+msgid "DeltaMetaAnalyser"
+msgstr ""
+
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__license__ <DeltaMetaAnalyser.__license__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__author__ <DeltaMetaAnalyser.__author__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__email__ <DeltaMetaAnalyser.__email__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`dataBlock <DeltaMetaAnalyser.dataBlock>`\\"
+msgstr ""
+
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:25:<autosummary>:1
+msgid ":py:obj:`DeltaMetaAnalyser <DeltaMetaAnalyser.DeltaMetaAnalyser>`\\"
+msgstr ""
+
+#: ../../source/autoapi/DeltaMetaAnalyser/index.rst:33:<autosummary>:1
+msgid ""
+":py:obj:`deltaMeta <DeltaMetaAnalyser.deltaMeta>`\\ \\(triggerList\\, "
+"signalList\\, period\\)"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:2
+msgid "EncodingAnalyser"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__license__ <EncodingAnalyser.__license__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__author__ <EncodingAnalyser.__author__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__email__ <EncodingAnalyser.__email__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`dataBlock <EncodingAnalyser.dataBlock>`\\"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:25:<autosummary>:1
+msgid ":py:obj:`EncodingAnalyser <EncodingAnalyser.EncodingAnalyser>`\\"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:35:<autosummary>:1
+msgid ""
+":py:obj:`metaJIT <EncodingAnalyser.metaJIT>`\\ \\(triggerList\\, "
+"signalList\\, period\\, ...\\)"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:35:<autosummary>:1
+msgid ""
+":py:obj:`statisticHistogramsJIT "
+"<EncodingAnalyser.statisticHistogramsJIT>`\\ \\(metaRNs\\, metaDeltas\\, "
+"viewFrom\\, ...\\)"
+msgstr ""
+
+#: ../../source/autoapi/EncodingAnalyser/index.rst:35:<autosummary>:1
+msgid ""
+":py:obj:`statisticRandomNumbersJIT "
+"<EncodingAnalyser.statisticRandomNumbersJIT>`\\ \\(randomNumberLimit\\, "
+"randomNumbers\\)"
+msgstr ""
+
+#: ../../source/autoapi/HistogramAnalyser/index.rst:2
+msgid "HistogramAnalyser"
+msgstr ""
+
+#: ../../source/autoapi/HistogramAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__license__ <HistogramAnalyser.__license__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/HistogramAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__author__ <HistogramAnalyser.__author__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/HistogramAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__email__ <HistogramAnalyser.__email__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/HistogramAnalyser/index.rst:17:<autosummary>:1
+msgid ":py:obj:`dataBlock <HistogramAnalyser.dataBlock>`\\"
+msgstr ""
+
+#: ../../source/autoapi/HistogramAnalyser/index.rst:25:<autosummary>:1
+msgid ":py:obj:`HistogramAnalyser <HistogramAnalyser.HistogramAnalyser>`\\"
+msgstr ""
+
+#: ../../source/autoapi/HistogramAnalyser/index.rst:34:<autosummary>:1
+msgid ""
+":py:obj:`analysisJIT <HistogramAnalyser.analysisJIT>`\\ \\(tList\\, "
+"sLists\\, viewFrom\\, viewTo\\, binCount\\, ...\\)"
+msgstr ""
+
+#: ../../source/autoapi/HistogramAnalyser/index.rst:34:<autosummary>:1
+msgid ""
+":py:obj:`analysisOneListJIT <HistogramAnalyser.analysisOneListJIT>`\\ "
+"\\(tList\\, sList\\, viewFrom\\, viewTo\\, ...\\)"
+msgstr ""
+
+#: ../../source/autoapi/MiscellaneousAnalyser/index.rst:2
+msgid "MiscellaneousAnalyser"
+msgstr ""
+
+#: ../../source/autoapi/index.rst:2
+msgid "API Reference"
+msgstr ""
+
+#: ../../source/autoapi/index.rst:4
+msgid "This page contains auto-generated API reference documentation [#f1]_."
+msgstr ""
+
+#: ../../source/autoapi/index.rst:16
+msgid ""
+"Created with `sphinx-autoapi <https://github.com/readthedocs/sphinx-"
+"autoapi>`_"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:2
+msgid "pytimetag.Analyser"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:16:<autosummary>:1
+msgid ":py:obj:`__license__ <pytimetag.Analyser.__license__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:16:<autosummary>:1
+msgid ":py:obj:`__author__ <pytimetag.Analyser.__author__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:16:<autosummary>:1
+msgid ":py:obj:`__email__ <pytimetag.Analyser.__email__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:25:<autosummary>:1
+msgid ":py:obj:`Analyser <pytimetag.Analyser.Analyser>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/Analyser/index.rst:25:<autosummary>:1
+msgid ":py:obj:`Validator <pytimetag.Analyser.Validator>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/BenchMarker/index.rst:2
+msgid "pytimetag.BenchMarker"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/BenchMarker/index.rst:14:<autosummary>:1
+msgid ":py:obj:`UNIT_SIZE <pytimetag.BenchMarker.UNIT_SIZE>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:2
+msgid "pytimetag.datablock"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__license__ <pytimetag.datablock.__license__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__author__ <pytimetag.datablock.__author__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:17:<autosummary>:1
+msgid ":py:obj:`__email__ <pytimetag.datablock.__email__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:17:<autosummary>:1
+msgid ":py:obj:`testDataBlock <pytimetag.datablock.testDataBlock>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:26:<autosummary>:1
+msgid ":py:obj:`DataBlock <pytimetag.datablock.DataBlock>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:26:<autosummary>:1
+msgid ":py:obj:`DataBlockSerializer <pytimetag.datablock.DataBlockSerializer>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:34:<autosummary>:1
+msgid ":py:obj:`serialize <pytimetag.datablock.serialize>`\\ \\(data\\)"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablock/index.rst:111
+#: ../../source/autoapi/pytimetag/index.rst:116
+msgid "Bases: :py:obj:`DataBlockSerializerImp`"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablockserialJIT/index.rst:2
+msgid "pytimetag.datablockserialJIT"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablockserialJIT/index.rst:17:<autosummary>:1
+msgid ""
+":py:obj:`serializeJIT <pytimetag.datablockserialJIT.serializeJIT>`\\ "
+"\\(contents\\, fineness\\)"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablockserialJIT/index.rst:17:<autosummary>:1
+msgid ""
+":py:obj:`serializeSectionJIT "
+"<pytimetag.datablockserialJIT.serializeSectionJIT>`\\ \\(data\\, begin\\,"
+" end\\)"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablockserialJIT/index.rst:17:<autosummary>:1
+msgid ""
+":py:obj:`deserializeJIT <pytimetag.datablockserialJIT.deserializeJIT>`\\ "
+"\\(contents\\)"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/datablockserialJIT/index.rst:17:<autosummary>:1
+msgid ""
+":py:obj:`deserializeSectionJIT "
+"<pytimetag.datablockserialJIT.deserializeSectionJIT>`\\ \\(data\\, "
+"buffer\\, pBuffer\\)"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:2
+msgid "pytimetag"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:8
+msgid "Submodules"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:28:<autosummary>:1
+msgid ":py:obj:`__license__ <pytimetag.__license__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:28:<autosummary>:1
+msgid ":py:obj:`__author__ <pytimetag.__author__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:28:<autosummary>:1
+msgid ":py:obj:`__email__ <pytimetag.__email__>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:39:<autosummary>:1
+msgid ":py:obj:`DataBlock <pytimetag.DataBlock>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:39:<autosummary>:1
+msgid ":py:obj:`DataBlockSerializer <pytimetag.DataBlockSerializer>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:39:<autosummary>:1
+msgid ":py:obj:`Analyser <pytimetag.Analyser>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:39:<autosummary>:1
+msgid ":py:obj:`Validator <pytimetag.Validator>`\\"
+msgstr ""
+
+#: ../../source/autoapi/pytimetag/index.rst:41
+msgid "Package Contents"
+msgstr ""
+
