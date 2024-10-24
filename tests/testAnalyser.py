@@ -150,11 +150,25 @@ class AnalyserTest(unittest.TestCase):
 
     dataBlock3 = DataBlock.generate(
       {'CreationTime': 100, 'DataTimeBegin': 10, 'DataTimeEnd': 1000000000010},
-      {0: ['Period', 1], 1: ['Pulse', 50000000, 2300000, 100]}
+      {0: ['Period', 1], 1: ['Pulse', 100000000, 2300000, 10]}
     ).synced([0, 5000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     result3 = mha.dataIncome(dataBlock3)
     for key in configHistograms:
-      self.assertTrue(np.all(np.array(result3[f'Histogram[{key}]']) == 0))
+      # self.assertTrue(np.all(np.array(result3[f'Histogram[{key}]']) == 0))
+      self.assertEqual(result3[f'PulseCount[{key}]'], len(configHistograms[key]))
+      histogram = np.array(result3.get(f'Histogram[{key}]'))
+      print('------------------------------------------------------------')
+      print(key, histogram)
+      self.assertTrue(np.abs(np.where(histogram == np.max(histogram))[0][0] - 50) < 5)
+      self.assertTrue(np.where(histogram > 0)[0].shape[0] < 15)
+      self.assertTrue(np.all(histogram[:42] == 0))
+      self.assertTrue(np.all(histogram[57:] == 0))
+
+    histogram1G1 = np.array(result3['Histogram[G1]'])
+    histogram1G2 = np.array(result3['Histogram[G2]'])
+    histogram1G1G2 = np.array(result3['Histogram[G1+G2]'])
+    histogram1G1G2Exp = histogram1G1 + histogram1G2
+    self.assertTrue(np.all(histogram1G1G2Exp == histogram1G1G2))
 
   def testFastCounterAnalyser(self):
     offset = 50400000000010

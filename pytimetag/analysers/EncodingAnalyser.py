@@ -36,7 +36,7 @@ class EncodingAnalyser(Analyser):
 
     triggerList = dataBlock.content[triggerChannel]
     signalList = dataBlock.content[signalChannel]
-    if len(triggerList) < 2 or len(signalList) == 0:
+    if len(triggerList) == 0 or len(signalList) == 0:
       histograms = [np.zeros(binCount, dtype='<i4') for rn in range(self.randomNumberLimit)]
     else:
       metaRNs, metaDeltas = metaJIT(triggerList, signalList, period, randomNumbers, pulsePerTrigger)
@@ -55,29 +55,10 @@ class EncodingAnalyser(Analyser):
 
     return map
 
-  def __meta(self, triggerList, signalList, period, randomNumbers, pulsePerTrigger):
-    currentTrigger = triggerList[0]
-    nextTrigger = triggerList[1]
-    iTrigger = 0
-    rnSize = len(randomNumbers)
-    metaRNs = np.zeros(len(signalList), dtype='<i4')
-    metaDeltas = np.zeros(len(signalList), dtype='<i4')
-    for iSignal in range(len(signalList)):
-      signalTime = signalList[iSignal]
-      while signalTime >= nextTrigger:
-        currentTrigger = nextTrigger
-        nextTrigger = sys.maxsize if iTrigger >= len(triggerList) else triggerList[iTrigger]
-        iTrigger += 1
-      pulseIndex = int((signalTime - currentTrigger) / period)
-      randomNumberIndex = int((pulseIndex + iTrigger * pulsePerTrigger) % rnSize)
-      metaRNs[iSignal] = randomNumbers[randomNumberIndex if randomNumberIndex >= 0 else randomNumberIndex + len(randomNumbers)]
-      metaDeltas[iSignal] = int(signalTime - currentTrigger - period * pulseIndex)
-    return (metaRNs, metaDeltas)
-
 @numba.njit(cache=True)
 def metaJIT(triggerList, signalList, period, randomNumbers, pulsePerTrigger):
   currentTrigger = triggerList[0]
-  nextTrigger = triggerList[1]
+  nextTrigger = sys.maxsize if len(triggerList) <= 1 else triggerList[1]
   iTrigger = 0
   rnSize = len(randomNumbers)
   metaRNs = np.zeros(len(signalList), dtype='<i4')

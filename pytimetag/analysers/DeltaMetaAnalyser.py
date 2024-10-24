@@ -3,9 +3,6 @@ __author__ = 'Hwaipy'
 __email__ = 'hwaipy@gmail.com'
 
 from pytimetag.Analyser import Analyser, Validator
-import numba
-import numpy as np
-import sys
 
 
 class DeltaMetaAnalyser(Analyser):
