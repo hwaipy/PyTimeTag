@@ -33,8 +33,10 @@ class HistogramAnalyser(Analyser):
     if triggerTooMuch:
       histograms = [np.ones(binCount, dtype='<i8') * -1 for signalChannel in signalChannels]
     else:
-      sLists = numba.typed.List([dataBlock.content[signalChannel] for signalChannel in signalChannels])
-      histograms = analysisJIT(tList, sLists, viewFrom, viewTo, binCount, divide)
+      if len(signalChannels) == 0: histograms = []
+      else:
+        sLists = numba.typed.List([dataBlock.content[signalChannel] for signalChannel in signalChannels])
+        histograms = analysisJIT(tList, sLists, viewFrom, viewTo, binCount, divide)
     return {'Histograms': [list([int(i) for i in h]) for h in histograms]}
 
 @numba.njit(parallel=False, cache=True)
