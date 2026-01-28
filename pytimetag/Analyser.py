@@ -23,7 +23,7 @@ class Analyser:
             result['Configuration'] = self.getConfigurations()
             return result
         else:
-            return None
+            return {'Configuration': self.getConfigurations()}
 
     def analysis(self, dataBlock):
         return {}

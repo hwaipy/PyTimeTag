@@ -57,7 +57,7 @@ class AnalyserTest(unittest.TestCase):
     self.assertEqual(result['10'], 0)
     mha.turnOff()
     result2 = mha.dataIncome(dataBlock)
-    self.assertIsNone(result2)
+    self.assertEqual(result2, {'Configuration': {}})
 
   def testHistogramAnalyser(self):
     offset = 50400000000010
@@ -97,7 +97,8 @@ class AnalyserTest(unittest.TestCase):
 
     mha.turnOff()
     result2 = mha.dataIncome(dataBlock)
-    self.assertIsNone(result2)
+
+    self.assertEqual(result2, {'Configuration': {"Sync": 0, "Signals": [1, 2], "ViewStart": 0, "ViewStop": 1000000000000, "BinCount": 100, "Divide": 1}})
 
   def testEncodingAnalyser(self):
     offset = 50400000000010
