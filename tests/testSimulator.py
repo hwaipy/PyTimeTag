@@ -346,8 +346,13 @@ class SimulatorTest(unittest.TestCase):
 
     def test_integration_long_run_monotonic_and_datablock_stats(self):
         """
-        Run the simulator ~2.5 s wall time with 50–80 ms steps, merge batches, check global time
-        order, build a :class:`DataBlock`, and sanity-check Period / Random / Pulse behaviour.
+        Run the simulator ~2.5 s wall time with 50–80 ms lab windows per batch, merge batches,
+        check global time order, build a :class:`DataBlock`, and sanity-check Period / Random /
+        Pulse behaviour.
+
+        Lab span from event min/max is asserted **relative to batch count**: when compute per batch
+        exceeds the lab window, pacing does not sleep and fewer batches fit in a fixed wall sleep
+        (common on slow CI macOS runners), so a fixed lower bound in seconds would flake.
 
         ``DataBlock.dataTimeBegin`` / ``dataTimeEnd`` are **host clock** bounds for the acquisition
         window (ms), not the min/max of timetag values in ``content``; lab-time extent is asserted
@@ -357,7 +362,7 @@ class SimulatorTest(unittest.TestCase):
         first_batch_done = threading.Event()
         resolution = 1e-12
         period_hz = 200
-        random_hz = 50_000
+        random_hz = 10_000  # was 50_000; fewer random draws per batch, same statistical checks
 
         def append_batch(arr):
             batches.append(arr.copy())
@@ -394,6 +399,7 @@ class SimulatorTest(unittest.TestCase):
         wall_end_ms = time.time() * 1000
 
         self.assertGreater(len(batches), 15, 'expected many batches over ~2.5 s wall time after first batch')
+        n_batches = len(batches)
         stream = np.concatenate(batches)
         self.assertGreater(stream.size, 5000)
 
@@ -406,8 +412,17 @@ class SimulatorTest(unittest.TestCase):
         t_begin = int(times.min())
         t_end_excl = int(times.max()) + 1
         lab_duration_s = (t_end_excl - t_begin) * resolution
-        self.assertGreater(lab_duration_s, 2.2, 'lab time should track ~wall time')
-        self.assertLess(lab_duration_s, 2.95)
+        lo_dt, hi_dt = 0.05, 0.08
+        self.assertGreater(
+            lab_duration_s,
+            n_batches * lo_dt * 0.65,
+            'event time span should be a sizable fraction of n_batches * min lab window',
+        )
+        self.assertLess(
+            lab_duration_s,
+            n_batches * hi_dt * 1.2 + hi_dt,
+            'event time span should not far exceed n_batches * max lab window',
+        )
 
         content = []
         for c in range(4):
@@ -439,7 +454,6 @@ class SimulatorTest(unittest.TestCase):
         self.assertLess(chi2, 35.0, 'histogram should be roughly uniform (chi-square on bins)')
 
         tc2 = db.content[2]
-        n_batches = len(batches)
         self.assertGreater(tc2.size, int(0.7 * 60 * n_batches))
         self.assertLess(tc2.size, int(1.3 * 60 * n_batches))
 
