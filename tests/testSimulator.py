@@ -1,5 +1,6 @@
 __author__ = 'Hwaipy'
 
+import threading
 import time
 import unittest
 
@@ -353,12 +354,17 @@ class SimulatorTest(unittest.TestCase):
         separately from the packed stream.
         """
         batches = []
+        first_batch_done = threading.Event()
         resolution = 1e-12
         period_hz = 200
         random_hz = 50_000
 
+        def append_batch(arr):
+            batches.append(arr.copy())
+            first_batch_done.set()
+
         sim = TimeTagSimulator(
-            lambda a: batches.append(a.copy()),
+            append_batch,
             channel_count=4,
             resolution=resolution,
             seed=123,
@@ -378,11 +384,16 @@ class SimulatorTest(unittest.TestCase):
 
         wall_begin_ms = time.time() * 1000
         sim.start()
+        # Avoid a scheduler race on busy CI: main may sleep/stop before the worker runs once.
+        self.assertTrue(
+            first_batch_done.wait(timeout=30.0),
+            'simulator thread should call dataUpdate at least once (check start() / thread failure)',
+        )
         time.sleep(2.5)
         sim.stop()
         wall_end_ms = time.time() * 1000
 
-        self.assertGreater(len(batches), 15, 'expected many batches over 2.5 s wall time')
+        self.assertGreater(len(batches), 15, 'expected many batches over ~2.5 s wall time after first batch')
         stream = np.concatenate(batches)
         self.assertGreater(stream.size, 5000)
 
