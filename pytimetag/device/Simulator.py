@@ -408,7 +408,7 @@ class TimeTagSimulator:
         for ch_idx, ts in enumerate(content):
             m = sizes[ch_idx]
             if m:
-                times[off : off + m] = np.asarray(ts, dtype=np.int64, copy=False)
+                times[off : off + m] = np.asarray(ts, dtype=np.int64)
                 chans[off : off + m] = ch_idx
             off += m
         order = np.argsort(times, kind='mergesort')
