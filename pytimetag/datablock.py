@@ -27,12 +27,12 @@ class DataBlock:
     return dataBlock
 
   @classmethod
-  def generate(cls, generalConfig, channelConfig, seDer=False):
+  def generate(cls, generalConfig, channelConfig, seDer=False, channel_count=16):
     creationTime = generalConfig['CreationTime'] if generalConfig.__contains__('Creationtime') else time.time() * 1000
     dataTimeBegin = generalConfig['DataTimeBegin'] if generalConfig.__contains__('DataTimeBegin') else 0
     dataTimeEnd = generalConfig['DataTimeEnd'] if generalConfig.__contains__('DataTimeEnd') else 0
     content = []
-    for channel in range(16):
+    for channel in range(channel_count):
       channelData = []
       if channelConfig.__contains__(channel):
         config = channelConfig[channel]
