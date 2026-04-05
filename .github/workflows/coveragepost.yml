@@ -1,5 +1,7 @@
 name: Post coverage comment
 
+# workflow_run + python-coverage-comment-action only supports posting a stored PR comment
+# (needs an open PR). Default-branch badge/data is published in the Coverage workflow on push.
 on:
   workflow_run:
     workflows: ["Coverage"]
@@ -7,15 +9,37 @@ on:
       - completed
 
 jobs:
-  test:
-    name: Run tests & display coverage
+  post-pr-comment:
+    name: Post PR comment from artifact
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    permissions:
+      pull-requests: write
+      contents: write
+      actions: read
     steps:
-    
       - name: Post comment
         uses: py-cov-action/python-coverage-comment-action@v3
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_PR_RUN_ID: ${{ github.event.workflow_run.id }}
-          VERBOSE: true
+
+  push-coverage-summary:
+    name: Report coverage (push to default branch)
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+    steps:
+      - name: Job summary
+        env:
+          COVERAGE_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          {
+            echo "## Coverage (default branch)"
+            echo ""
+            echo "Coverage workflow completed for push to \`${HEAD_BRANCH}\`."
+            echo ""
+            echo "The [Coverage](${COVERAGE_RUN_URL}) job runs \`python-coverage-comment-action\` in **default branch mode**: it updates the coverage badge, JSON data, and HTML report on branch \`python-coverage-comment-action-data\` (see that branch's README for badge snippets)."
+          } >> "$GITHUB_STEP_SUMMARY"
