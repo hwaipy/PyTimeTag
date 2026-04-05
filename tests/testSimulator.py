@@ -121,6 +121,7 @@ class SimulatorTest(unittest.TestCase):
             cb,
             resolution=1e-12,
             update_interval_range_s=(1.0, 1.0),
+            realtime_pacing=False,
         )
         sim.set_channel(
             0,
@@ -144,7 +145,11 @@ class SimulatorTest(unittest.TestCase):
     def test_disabled_and_reset(self):
         received = []
 
-        sim = TimeTagSimulator(lambda a: received.append(a.copy()), update_interval_range_s=(1.0, 1.0))
+        sim = TimeTagSimulator(
+            lambda a: received.append(a.copy()),
+            update_interval_range_s=(1.0, 1.0),
+            realtime_pacing=False,
+        )
         sim.set_channel(3, mode='Period', period_count=50, enabled=False)
         sim.step()
         _, chs_arr = unpack_timetag(received[-1])
@@ -164,6 +169,7 @@ class SimulatorTest(unittest.TestCase):
             lambda a: received.append(a.copy()),
             resolution=1e-12,
             update_interval_range_s=(1e-3, 1e-3),
+            realtime_pacing=False,
         )
         # 1 ms window → 1000 events at 1 MHz
         sim.set_channel(0, mode='Period', period_count=1_000_000, dead_time_s=0.0, threshold_voltage=-1.0, reference_pulse_v=1.0)
@@ -180,7 +186,11 @@ class SimulatorTest(unittest.TestCase):
 
     def test_threshold_blocks_when_above_reference(self):
         received = []
-        sim = TimeTagSimulator(lambda a: received.append(a.copy()), update_interval_range_s=(1.0, 1.0))
+        sim = TimeTagSimulator(
+            lambda a: received.append(a.copy()),
+            update_interval_range_s=(1.0, 1.0),
+            realtime_pacing=False,
+        )
         sim.set_channel(
             0,
             mode='Period',
@@ -197,7 +207,11 @@ class SimulatorTest(unittest.TestCase):
     def test_random_mode_sorted(self):
         np.random.seed(7)
         received = []
-        sim = TimeTagSimulator(lambda a: received.append(a.copy()), update_interval_range_s=(1.0, 1.0))
+        sim = TimeTagSimulator(
+            lambda a: received.append(a.copy()),
+            update_interval_range_s=(1.0, 1.0),
+            realtime_pacing=False,
+        )
         sim.set_channel(
             1,
             mode='Random',
@@ -216,7 +230,11 @@ class SimulatorTest(unittest.TestCase):
     def test_pulse_mode_alias(self):
         np.random.seed(99)
         received = []
-        sim = TimeTagSimulator(lambda a: received.append(a.copy()), update_interval_range_s=(1.0, 1.0))
+        sim = TimeTagSimulator(
+            lambda a: received.append(a.copy()),
+            update_interval_range_s=(1.0, 1.0),
+            realtime_pacing=False,
+        )
         sim.set_channel(
             2,
             mode='RandomPulse',
@@ -280,7 +298,7 @@ class SimulatorTest(unittest.TestCase):
             TimeTagSimulator(None)
 
     def test_lab_window_matches_wall_interval(self):
-        """Δt_real / resolution == simulated [begin, end) width in ticks (same draw as sleep in thread)."""
+        """Δt_real / resolution == simulated [begin, end) width in ticks (same draw as pacing window)."""
         mins = []
 
         def cb(arr):
@@ -313,6 +331,7 @@ class SimulatorTest(unittest.TestCase):
             resolution=1e-12,
             update_interval_range_s=(1.0, 1.0),
             seed=1,
+            realtime_pacing=False,
         )
         sim.set_channel(0, mode='Period', period_count=10, threshold_voltage=-1.0, reference_pulse_v=1.0)
         sim.step()

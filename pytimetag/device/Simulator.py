@@ -134,14 +134,17 @@ class TimeTagSimulator:
     aligned across batches. ``Pulse`` mode still uses ``pulse_count`` / ``pulse_events`` as counts
     **per batch** (unchanged from ``DataBlock.generate``).
 
-    **Update rate (single knob):** ``update_interval_range_s`` controls **both**
+    **Update rate (single knob):** ``update_interval_range_s`` draws a lab window width Δt (seconds)
+    each tick; that becomes ``span_ticks = max(1, round(Δt / resolution))`` simulated ticks per push.
 
-    1. how long the background thread **sleeps** between pushes (real time, seconds), and
-    2. the width of the simulated acquisition window **(end − begin)** in time-tag ticks,
-       namely ``round(Δt_real / resolution)`` for the **same** Δt\_real drawn each tick.
+    **Wall-clock sync:** with ``realtime_pacing=True`` (default), after each chunk is synthesized
+    and delivered the simulator sleeps if needed so **wall time for that step** is at least
+    ``span_ticks * resolution`` seconds—i.e. program time tracks simulated lab time for the window.
+    Set ``realtime_pacing=False`` for maximum throughput (e.g. benchmarks). The background thread
+    uses an interruptible wait so :meth:`stop` can exit promptly during the pacing sleep.
 
-    So lab-time advances in lockstep with wall-clock pacing (1 s of wait ⇒ 1 s of lab time
-    when ``resolution`` is 1 s per tick; default ``1e-12`` ⇒ picosecond ticks).
+    So lab-time advances in lockstep with wall-clock pacing (1 s of lab window per iteration ⇒
+    ~1 s of wall time per iteration when work is faster than that window).
     """
 
     def __init__(
@@ -152,6 +155,7 @@ class TimeTagSimulator:
         seed: Optional[int] = None,
         update_interval_range_s: Union[Tuple[float, float], float] = (0.010, 0.020),
         initial_sim_time_s: float = 0.0,
+        realtime_pacing: bool = True,
     ):
         if not callable(dataUpdate):
             raise TypeError('dataUpdate must be callable')
@@ -180,6 +184,7 @@ class TimeTagSimulator:
             if self._interval_lo <= 0 or self._interval_hi < self._interval_lo:
                 raise ValueError('Invalid update_interval_range_s: {!r}'.format(update_interval_range_s))
         self._cursor = int(round(initial_sim_time_s / resolution))
+        self._realtime_pacing = bool(realtime_pacing)
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
@@ -231,12 +236,38 @@ class TimeTagSimulator:
 
     def step(self) -> None:
         """
-        Emit one chunk using the same rule as the background thread: draw one ``dt`` seconds from
+        Emit one chunk using the same rule as the background thread: draw one ``dt`` from
         ``update_interval_range_s``, convert to span ticks ``round(dt / resolution)``, synthesize
-        that window (no wall-clock sleep). Does not start the thread.
+        that window, then optionally sleep so wall time catches up to the simulated window width
+        (see ``realtime_pacing``). Does not start the thread.
         """
+        t0 = time.perf_counter()
         dt = self._draw_interval_seconds()
-        self._emit_chunk_for_span(self._interval_seconds_to_span_ticks(dt))
+        span_ticks = self._interval_seconds_to_span_ticks(dt)
+        self._emit_chunk_for_span(span_ticks)
+        self._pace_wall_clock_after_emit(span_ticks, t0, interruptible=False)
+
+    def _lab_seconds_for_span(self, span_ticks: int) -> float:
+        return float(span_ticks) * float(self.resolution)
+
+    def _pace_wall_clock_after_emit(self, span_ticks: int, t_start: float, interruptible: bool) -> bool:
+        """
+        If realtime pacing is on, wait until wall time since ``t_start`` reaches the lab duration
+        ``span_ticks * resolution``. Returns True if ``interruptible`` and stop was requested during
+        wait; otherwise False.
+        """
+        if not self._realtime_pacing:
+            return False
+        dt_lab = self._lab_seconds_for_span(span_ticks)
+        if not math.isfinite(dt_lab) or dt_lab <= 0:
+            return self._stop.is_set() if interruptible else False
+        delay = dt_lab - (time.perf_counter() - t_start)
+        if delay <= 0:
+            return self._stop.is_set() if interruptible else False
+        if interruptible:
+            return self._stop.wait(timeout=delay)
+        time.sleep(delay)
+        return False
 
     def _dead_ticks(self, dead_time_s: float) -> int:
         if dead_time_s <= 0:
@@ -247,13 +278,20 @@ class TimeTagSimulator:
     def _apply_dead_time(sorted_ts: np.ndarray, dead_ticks: int) -> np.ndarray:
         if dead_ticks <= 0 or sorted_ts.size == 0:
             return sorted_ts
-        out: List[int] = []
-        last = -2**63
-        for t in sorted_ts.tolist():
-            if t - last >= dead_ticks:
-                out.append(t)
+        ts = np.asarray(sorted_ts, dtype=np.int64, order='C')
+        n = ts.size
+        out = np.empty(n, dtype=np.int64)
+        # Use Python int for last so (t - last) cannot int64-overflow (e.g. t=0, last=-2**63).
+        last = -(2**63)
+        k = 0
+        dt = int(dead_ticks)
+        for i in range(n):
+            t = int(ts[i])
+            if t - last >= dt:
+                out[k] = t
                 last = t
-        return np.array(out, dtype='<i8')
+                k += 1
+        return out[:k]
 
     def _apply_threshold(self, sorted_ts: np.ndarray, keep_prob: float) -> np.ndarray:
         if sorted_ts.size == 0 or keep_prob >= 1.0:
@@ -350,23 +388,31 @@ class TimeTagSimulator:
                 new_content.append(np.array([], dtype=np.int64))
                 continue
             ts = np.asarray(ts, dtype=np.int64, order='C')
-            ts.sort()
             ts = self._apply_dead_time(ts, dead_ticks_list[ch_idx])
             ts = self._apply_threshold(ts, keep_probs[ch_idx])
             new_content.append(ts.astype(np.int64))
         return new_content
 
     def _content_to_packed_stream(self, content: List[np.ndarray]) -> np.ndarray:
-        pairs: List[Tuple[int, int]] = []
-        for ch_idx, ts in enumerate(content):
-            for t in ts.tolist():
-                pairs.append((int(t), ch_idx))
-        pairs.sort(key=lambda x: x[0])
-        if not pairs:
+        """
+        Merge per-channel (already time-sorted) tick arrays into one global time order.
+        Uses a single NumPy sort instead of Python list/tuple materialization.
+        """
+        sizes = [int(ts.size) for ts in content]
+        n = sum(sizes)
+        if n == 0:
             return np.array([], dtype=np.uint64)
-        ts_arr = np.array([p[0] for p in pairs], dtype=np.int64)
-        cs_arr = np.array([p[1] for p in pairs], dtype=np.int64)
-        return pack_timetag(ts_arr, cs_arr)
+        times = np.empty(n, dtype=np.int64)
+        chans = np.empty(n, dtype=np.int64)
+        off = 0
+        for ch_idx, ts in enumerate(content):
+            m = sizes[ch_idx]
+            if m:
+                times[off : off + m] = np.asarray(ts, dtype=np.int64, copy=False)
+                chans[off : off + m] = ch_idx
+            off += m
+        order = np.argsort(times, kind='mergesort')
+        return pack_timetag(times[order], chans[order])
 
     def _emit_chunk_for_span(self, span_ticks: int) -> None:
         if span_ticks < 1:
@@ -380,11 +426,12 @@ class TimeTagSimulator:
 
     def _loop(self) -> None:
         while not self._stop.is_set():
+            t0 = time.perf_counter()
             dt = self._draw_interval_seconds()
-            if self._stop.wait(timeout=dt):
-                break
             span_ticks = self._interval_seconds_to_span_ticks(dt)
             self._emit_chunk_for_span(span_ticks)
+            if self._pace_wall_clock_after_emit(span_ticks, t0, interruptible=True):
+                break
 
 
 if __name__ == '__main__':

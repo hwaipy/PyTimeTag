@@ -1,16 +1,18 @@
-from pytimetag import DataBlock, HistogramAnalyser, EncodingAnalyser, Parallels
+from pytimetag import DataBlock, HistogramAnalyser, EncodingAnalyser
+from pytimetag.device.Simulator import TimeTagSimulator
 import time
 import numpy as np
 import numba
 
 if __name__ == '__main__':
   UNIT_SIZE = 20
-  numba.set_num_threads(10)
+  numba.set_num_threads(1)
 
   def run():
     print("\n ******** Start BenchMarking ******** \n")
     # benchMarkingSerDeser()
-    benchMarkingMultiHistogramAnalyser()
+    # benchMarkingMultiHistogramAnalyser()
+    benchMarkingSimulator()
     # benchMarkingEncodingAnalyser()
 #     // doBenchMarkingSyncedDataBlock()
 #     // doBenchMarkingMultiHistogramAnalyser()
@@ -98,6 +100,71 @@ if __name__ == '__main__':
       operation()
       count += 1
     return (1 + time.time() - stop) / count
+
+  def benchMarkingSimulator():
+    """
+    Measure TimeTagSimulator throughput: tight loop of step() for ~5 s wall time.
+    Reports process CPU time vs wall time (generation dominates; no thread sleep).
+    """
+    duration_s = 5.0
+    label, wall_s, events, ev_per_s, cpu_s, cpu_ratio = doBenchMarkingSimulator(duration_s)
+    rt = ReportTable(
+      'TimeTagSimulator data rate (step() loop, ~{:.0f} s wall, no background thread)'.format(duration_s),
+      ("Load", "Wall s", "uint64 events", "events/s", "CPU s", "CPU/Wall"),
+    ).setFormatter(1, lambda s: "{:.3f}".format(s)).setFormatter(2, formatterKMG).setFormatter(
+      3, lambda r: "{:.3e}".format(r) if r >= 1e6 else "{:.1f}".format(r)
+    ).setFormatter(4, lambda s: "{:.3f}".format(s)).setFormatter(5, lambda x: "{:.1f}%".format(x * 100.0))
+    rt.addRow(label, wall_s, events, ev_per_s, cpu_s, cpu_ratio)
+    rt.output()
+
+  def doBenchMarkingSimulator(duration_s):
+    """
+    Repeated step() for approximately duration_s seconds (perf_counter).
+    Returns (description, wall_seconds, total_events, events_per_wall_s, process_cpu_seconds, cpu_seconds/wall_seconds).
+    """
+    total = [0]
+
+    def cb(arr):
+      total[0] += int(arr.size)
+
+    channel_count = 8
+    sim = TimeTagSimulator(
+      cb,
+      channel_count=channel_count,
+      seed=42,
+      resolution=1e-12,
+      update_interval_range_s=(0.05, 0.08),
+      realtime_pacing=True,
+    )
+    for i in range(channel_count):
+      if i < 4:
+        sim.set_channel(
+          i,
+          mode='Period',
+          period_count=500000,
+          threshold_voltage=-1.0,
+          reference_pulse_v=1.0,
+        )
+      else:
+        sim.set_channel(
+          i,
+          mode='Random',
+          random_count=300000,
+          threshold_voltage=-1.0,
+          reference_pulse_v=1.0,
+        )
+
+    t0 = time.perf_counter()
+    c0 = time.process_time()
+    while time.perf_counter() - t0 < duration_s:
+      sim.step()
+    wall_s = time.perf_counter() - t0
+    cpu_s = time.process_time() - c0
+    if wall_s <= 0:
+      wall_s = 1e-9
+    ev = total[0]
+    label = "{} ch: 4x Period 500 kHz + 4x Random 300 kHz (fixed 15 ms window/step)".format(channel_count)
+    return (label, wall_s, ev, ev / wall_s, cpu_s, cpu_s / wall_s)
 
   def formatterKMG(value):
     if value < 0:
