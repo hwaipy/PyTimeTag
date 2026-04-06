@@ -2,7 +2,7 @@ import setuptools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
-version = '2.2.0'
+version = '2.2.1'
 
 setuptools.setup(
     name='pytimetag',
@@ -13,14 +13,14 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     license='gpl-3.0',
-    # url='https://github.com/hwaipy/InteractionFreePy',
-    # download_url='https://github.com/hwaipy/InteractionFreePy/archive/v{}.tar.gz'.format(version),
+    url='https://github.com/hwaipy/PyTimeTag',
     keywords=['timetag', 'physics'],
     # packages=setuptools.find_packages(),
     install_requires=[
         'numpy',
         'msgpack',
-        'numba'
+        'numba',
+        'rich'
     ],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
@@ -31,6 +31,9 @@ setuptools.setup(
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
     ],
-    python_requires='>=3.8',
+    python_requires='>=3.9',
 )
