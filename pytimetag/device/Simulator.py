@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
+from pytimetag.device.base import TimeTagDevice
 
 DEFAULT_CHANNEL_COUNT = 16
 MAX_PACKED_CHANNELS = 16
@@ -117,7 +118,7 @@ class ChannelSettings:
         return 1.0 if self.reference_pulse_v > self.threshold_voltage else 0.0
 
 
-class TimeTagSimulator:
+class TimeTagSimulator(TimeTagDevice):
     """
     Virtual TimeTag source: periodically calls ``dataUpdate`` with a 1-D ``uint64`` stream.
 
@@ -157,6 +158,12 @@ class TimeTagSimulator:
         initial_sim_time_s: float = 0.0,
         realtime_pacing: bool = True,
     ):
+        super().__init__(
+            dataUpdate=dataUpdate,
+            channel_count=channel_count,
+            resolution=resolution,
+            serial_number="SIMULATOR",
+        )
         if not callable(dataUpdate):
             raise TypeError('dataUpdate must be callable')
         if channel_count < 1:
@@ -207,6 +214,12 @@ class TimeTagSimulator:
 
     def reset_channels(self) -> None:
         self._channels = [ChannelSettings() for _ in range(self._channel_count)]
+
+    def set_deadtime(self, channel: int, dead_time_s: float) -> None:
+        self.set_channel(channel, dead_time_s=dead_time_s)
+
+    def set_trigger_level(self, channel: int, trigger_level_v: float) -> None:
+        self.set_channel(channel, threshold_voltage=trigger_level_v)
 
     def start(self) -> None:
         """Start background thread that invokes ``dataUpdate`` at configured intervals."""

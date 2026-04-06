@@ -2,7 +2,7 @@ import setuptools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
-version = '3.0.1'
+version = '3.0.2'
 
 setuptools.setup(
     name='pytimetag',
@@ -22,6 +22,9 @@ setuptools.setup(
         'numba',
         'rich'
     ],
+    extras_require={
+        'swabian': ['TimeTagger'],
+    },
     entry_points={
         'console_scripts': [
             'pytimetag=pytimetag.__main__:main',
