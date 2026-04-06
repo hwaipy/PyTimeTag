@@ -15,10 +15,17 @@ from pytimetag.device.manager import device_type_manager
 def _load_timetagger():
     try:
         import TimeTagger  # type: ignore
-    except ImportError as e:
+    except Exception as e:
+        msg = str(e)
+        if "_ARRAY_API" in msg or "numpy.core.multiarray failed to import" in msg:
+            raise ImportError(
+                "Swabian TimeTagger binary is not compatible with current NumPy runtime. "
+                "Detected a NumPy ABI mismatch (typically NumPy 2.x with a module built for NumPy 1.x). "
+                "Please install a compatible NumPy, e.g. `pip install \"numpy>=1.25,<2\"` in this environment."
+            ) from e
         raise ImportError(
-            "Swabian device support requires optional dependency `TimeTagger`. "
-            "Install extras with: pip install pytimetag[swabian]"
+            "Swabian device support requires the optional Swabian Python driver. "
+            "Install extras with: pip install \"pytimetag[swabian]\""
         ) from e
     return TimeTagger
 
@@ -190,7 +197,11 @@ class SwabianTimeTagFactory(TimeTagDeviceFactory):
     @classmethod
     def discover(cls) -> List[DeviceInfo]:
         tt = _load_timetagger()
-        entries = tt.scanTimeTagger(include_model_name=True)
+        # Newer versions support include_model_name; older ones only accept no args.
+        try:
+            entries = tt.scanTimeTagger(include_model_name=True)
+        except TypeError:
+            entries = tt.scanTimeTagger()
         out: List[DeviceInfo] = []
         for ent in entries:
             text = str(ent)

@@ -23,7 +23,10 @@ setuptools.setup(
         'rich'
     ],
     extras_require={
-        'swabian': ['TimeTagger'],
+        'swabian': [
+            'Swabian-TimeTagger',
+            'numpy>=1.25,<2',
+        ],
     },
     entry_points={
         'console_scripts': [
