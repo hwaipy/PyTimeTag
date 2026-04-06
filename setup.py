@@ -2,7 +2,7 @@ import setuptools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
-version = '2.2.1'
+version = '3.0.0'
 
 setuptools.setup(
     name='pytimetag',
@@ -15,13 +15,18 @@ setuptools.setup(
     license='gpl-3.0',
     url='https://github.com/hwaipy/PyTimeTag',
     keywords=['timetag', 'physics'],
-    # packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(),
     install_requires=[
         'numpy',
         'msgpack',
         'numba',
         'rich'
     ],
+    entry_points={
+        'console_scripts': [
+            'pytimetag=pytimetag.__main__:main',
+        ],
+    },
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
