@@ -1,14 +1,30 @@
 {
-  "build": { "dockerfile": "Dockerfile" },
+  "name": "Python TimeTag Project",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    }
+  },
   "postCreateCommand": "pip install --upgrade pip && for f in requirements.txt requirements-test.txt requirements-docs.txt; do [ -f \"$f\" ] && pip install -r \"$f\" || echo \"Skipping $f\"; done",
   "customizations": {
     "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.unittestEnabled": true,
+        "python.testing.pytestEnabled": false
+      },
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-python.debugpy",
         "github.vscode-github-actions",
-      ],
+        "tamasfe.even-better-toml",
+        "njpwerner.autodocstring"
+      ]
     }
-  }
+  },
+  "remoteUser": "vscode"
 }
