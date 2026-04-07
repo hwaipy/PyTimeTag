@@ -5,7 +5,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from rich.console import Console
 from rich.live import Live
@@ -13,13 +13,13 @@ from rich.table import Table
 
 from pytimetag.datablock import DataBlock
 from pytimetag.device import TimeTagSimulator, device_type_manager
-from pytimetag.device.SwabianTimeTag import SwabianNumPyABIError
 from pytimetag.device.datablock_packer import (
     DataBlockPackerPath,
     DataBlockStreamPacker,
     SplitByChannelEvent,
     SplitByTimeWindow,
 )
+from pytimetag.device.source_registry import list_cli_hardware_sources
 
 
 def _parse_channel_settings(items: List[str], channel_count: int) -> Dict[int, Dict[str, object]]:
@@ -85,55 +85,6 @@ def _parse_channel_scalar(items: List[str], channel_count: int, option_name: str
     return out
 
 
-def _print_swabian_numpy_abi_help(console: Console) -> None:
-    """After a Swabian/NumPy ABI failure, print a short, actionable fix (no traceback)."""
-    console.print()
-    console.print("[bold red]Swabian TimeTagger / NumPy ABI mismatch[/bold red]")
-    console.print(
-        "The [cyan]_TimeTagger[/cyan] extension (from Swabian’s driver) was built against one NumPy "
-        "ABI, but this interpreter has a different NumPy (often: driver built for NumPy 1.x, env has NumPy 2.x). "
-        "You cannot “rebuild” that binary yourself; fix the environment or use a newer driver."
-    )
-    console.print()
-    console.print("[bold]Fix 1 — match NumPy to an older driver (fastest in a venv)[/bold]")
-    console.print("  [cyan]pip install \"numpy>=1.25,<2\"[/cyan]")
-    console.print("  Then run [cyan]pytimetag[/cyan] again. Use a dedicated venv if you need NumPy 2 for other projects.")
-    console.print()
-    console.print("[bold]Fix 2 — reinstall / refresh the Swabian Python package (may ship NumPy-2-compatible wheels)[/bold]")
-    console.print("  [cyan]pip install --upgrade --force-reinstall --no-cache-dir \"Swabian-TimeTagger\"[/cyan]")
-    console.print(
-        "  Also update the [cyan]Swabian Instruments Time Tagger[/cyan] application. "
-        "If imports still come from [dim]…\\Program Files\\Swabian Instruments\\…[/dim], that build may lag the pip wheel; "
-        "see Swabian’s docs for PYTHONPATH / which copy Python loads."
-    )
-    console.print()
-    console.print("[bold]Fix 3 — stay on NumPy 2.x[/bold]")
-    console.print(
-        "  You need a [cyan]_TimeTagger[/cyan] build compiled for NumPy 2 (from a newer Swabian release or wheel). "
-        "If none is available yet, use Fix 1 in this environment."
-    )
-    console.print()
-
-
-def _discover_swabian_info(serial: str = None) -> Tuple[str, List[str]]:
-    devices = device_type_manager.discover("swabian")
-    if not devices:
-        raise RuntimeError("No connected Swabian Time Tagger found.")
-    serials = [d.serial_number for d in devices]
-    if serial is None:
-        if len(serials) > 1:
-            raise RuntimeError(
-                "Multiple Swabian devices found. Please specify --serial. "
-                f"Available serials: {', '.join(serials)}"
-            )
-        return serials[0], serials
-    if serial not in serials:
-        raise RuntimeError(
-            f"Requested --serial {serial!r} not found. Available serials: {', '.join(serials)}"
-        )
-    return serial, serials
-
-
 def _ensure_output_path(base_dir: Path, block: DataBlock) -> Path:
     dt = datetime.fromtimestamp(block.creationTime / 1000.0)
     date_dir = dt.strftime("%Y-%m-%d")
@@ -170,10 +121,12 @@ def _build_block_count_table(
 
 
 def main() -> None:
+    source_choices = ["simulator"] + list_cli_hardware_sources()
     parser = argparse.ArgumentParser(
-        description="Run a TimeTag app with Simulator or Swabian source, split into DataBlocks, show counts with rich live table, and serialize blocks."
+        description="Run a TimeTag app with the simulator or a registered hardware source, "
+        "split into DataBlocks, show counts with a live table, and serialize blocks."
     )
-    parser.add_argument("--source", default="simulator", choices=["simulator", "swabian"], help="Data source type")
+    parser.add_argument("--source", default="simulator", choices=source_choices, help="Data source type")
     parser.add_argument("--output-dir", default="./store_test", help="Directory used to store serialized DataBlocks")
     parser.add_argument("--save", action="store_true", help="Enable saving serialized DataBlocks to output-dir")
     parser.add_argument("--split-s", type=float, default=1.0, help="DataBlock split window in seconds (default: 1.0)")
@@ -186,12 +139,24 @@ def main() -> None:
     parser.add_argument("--split-channel", type=int, default=0, help="Trigger channel index for --split-mode channel")
     parser.add_argument("--channel-count", type=int, default=8, help="Active channel count used by source")
     parser.add_argument("--resolution", type=float, default=1e-12, help="Seconds per tick")
-    parser.add_argument("--serial", default=None, help="Swabian device serial number")
+    parser.add_argument("--serial", default=None, help="Hardware device serial (when using a hardware --source)")
     parser.add_argument("--seed", type=int, default=42, help="Simulator RNG seed")
     parser.add_argument("--update-lo-s", type=float, default=0.05, help="Simulator update interval lower bound")
     parser.add_argument("--update-hi-s", type=float, default=0.10, help="Simulator update interval upper bound")
-    parser.add_argument("--swabian-buffer-size", type=int, default=int(1e6), help="Swabian TimeTagStream n_max_events")
-    parser.add_argument("--swabian-poll-s", type=float, default=0.002, help="Swabian stream polling interval (seconds)")
+    parser.add_argument(
+        "--hardware-buffer-size",
+        type=int,
+        default=int(1e6),
+        dest="hardware_buffer_size",
+        help="Hardware stream buffer size (n_max_events; meaning depends on --source plugin)",
+    )
+    parser.add_argument(
+        "--hardware-poll-s",
+        type=float,
+        default=0.002,
+        dest="hardware_poll_s",
+        help="Hardware poll interval in seconds (meaning depends on --source plugin)",
+    )
     parser.add_argument(
         "--channel",
         action="append",
@@ -259,8 +224,9 @@ def main() -> None:
             for b in blocks:
                 handle_block(b, live)
 
-    source_label = "Simulator source" if args.source == "simulator" else "Swabian source"
-    console.print(f"[bold]TimeTag app started ({source_label}). Press Ctrl+C to stop.[/bold]")
+    console.print(
+        f"[bold]TimeTag app started (source=[cyan]{args.source}[/cyan]). Press Ctrl+C to stop.[/bold]"
+    )
     if args.save:
         console.print(f"Output directory: [cyan]{output_base}[/cyan]")
     else:
@@ -292,20 +258,10 @@ def main() -> None:
             for i in range(1, args.channel_count):
                 device.set_channel(i, mode="Random", random_count=50_000, threshold_voltage=-1.0, reference_pulse_v=1.0)
         else:
-            try:
-                serial, available = _discover_swabian_info(args.serial)
-                console.print(f"Swabian serial: [cyan]{serial}[/cyan] (available: {', '.join(available)})")
-                device = device_type_manager.connect(
-                    "swabian",
-                    serial_number=serial,
-                    dataUpdate=lambda words: on_words(words, live),
-                    channel_count=args.channel_count,
-                    resolution=args.resolution,
-                    n_max_events=args.swabian_buffer_size,
-                    poll_interval_s=args.swabian_poll_s,
-                )
-            except SwabianNumPyABIError:
-                _print_swabian_numpy_abi_help(console)
+            device = device_type_manager.create_device_for_cli_source(
+                args.source, args, console, live, on_words
+            )
+            if device is None:
                 return
 
         for idx, cfg in channel_settings.items():
@@ -336,8 +292,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except SwabianNumPyABIError:
-        _print_swabian_numpy_abi_help(Console(stderr=True))
-        sys.exit(1)
+    main()

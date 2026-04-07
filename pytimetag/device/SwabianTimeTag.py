@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import importlib.util
+import os
 import re
+import subprocess
+import sys
 import threading
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -16,6 +21,120 @@ from pytimetag.device.manager import device_type_manager
 
 class SwabianNumPyABIError(ImportError):
     """Raised when the Swabian ``_TimeTagger`` extension does not match the installed NumPy ABI."""
+
+
+# Swabian: NumPy >= 2.0 supported from Time Tagger 2.17.4 onward (see KB link below).
+MIN_TIMETAGGER_VERSION_FOR_NUMPY2 = "2.17.4"
+SWABIAN_NUMPY2_KB_URL = (
+    "https://www.swabianinstruments.com/knowledge/base/time-tagger-setup/"
+    "fixing-numpy-2.0.0-import-error-in-time-tagger/"
+)
+SWABIAN_DOWNLOADS_URL = "https://www.swabianinstruments.com/time-tagger/downloads/"
+
+
+def _quote_exe_for_display() -> str:
+    """Return ``sys.executable`` with quoting so it is safe to show as a copy-paste command."""
+    py = os.path.normpath(sys.executable)
+    if os.name == "nt":
+        return f'"{py}"' if (" " in py or "\t" in py) else py
+    import shlex
+
+    return shlex.quote(py)
+
+
+def recommended_pip_command(*pip_argv: str) -> str:
+    """
+    Full ``pip`` invocation using **this** interpreter only (never bare ``pip``).
+
+    Example: ``recommended_pip_command("install", "numpy>=1.25,<2")``
+    """
+    exe = _quote_exe_for_display()
+    parts: List[str] = []
+    for arg in pip_argv:
+        if os.name == "nt":
+            if any(c in arg for c in " \t<>=[],;") or "[" in arg or "]" in arg:
+                parts.append('"' + arg.replace('"', '\\"') + '"')
+            else:
+                parts.append(arg)
+        else:
+            import shlex
+
+            parts.append(shlex.quote(arg))
+    return f"{exe} -m pip " + " ".join(parts)
+
+
+def recommended_python_m_pytimetag(*args: str) -> str:
+    """Example command to run the CLI with the same interpreter (``python -m pytimetag ...``)."""
+    exe = _quote_exe_for_display()
+    rest = " ".join(args) if args else ""
+    return f"{exe} -m pytimetag{(' ' + rest) if rest else ''}"
+
+
+def _parse_leading_semver(v: str) -> Optional[Tuple[int, int, int]]:
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", v.strip())
+    if m:
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    m2 = re.match(r"^(\d+)\.(\d+)", v.strip())
+    if m2:
+        return (int(m2.group(1)), int(m2.group(2)), 0)
+    return None
+
+
+def timetagger_version_is_below_numpy2_support(version: Optional[str]) -> Optional[bool]:
+    """
+    ``True`` if *version* is strictly older than :data:`MIN_TIMETAGGER_VERSION_FOR_NUMPY2`,
+    ``False`` if at or above, ``None`` if *version* is missing or unparsable.
+    """
+    if not version:
+        return None
+    cur = _parse_leading_semver(version)
+    lo = _parse_leading_semver(MIN_TIMETAGGER_VERSION_FOR_NUMPY2)
+    if not cur or not lo:
+        return None
+    return cur < lo
+
+
+def detect_swabian_timetagger_version() -> Tuple[Optional[str], str]:
+    """
+    Best-effort Swabian TimeTagger version without importing ``_TimeTagger``.
+
+    Returns ``(version_string, source)`` where *source* is ``pip``, ``TimeTagger.py``, or ``unknown``.
+    """
+    # 1) pip show (same interpreter as this process)
+    try:
+        r = subprocess.run(
+            [sys.executable, "-m", "pip", "show", "Swabian-TimeTagger"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if r.returncode == 0 and r.stdout:
+            for line in r.stdout.splitlines():
+                if line.startswith("Version:"):
+                    ver = line.split(":", 1)[1].strip()
+                    if ver:
+                        return (ver, "pip")
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        pass
+
+    # 2) locate TimeTagger.py and read __version__ / VERSION (no import of extension)
+    try:
+        spec = importlib.util.find_spec("TimeTagger")
+        origin = getattr(spec, "origin", None) if spec else None
+        if origin and str(origin).endswith(".py"):
+            text = Path(origin).read_text(encoding="utf-8", errors="replace")
+            for line in text.splitlines()[:250]:
+                s = line.strip()
+                m = re.match(r"^__version__\s*=\s*['\"]([^'\"]+)['\"]", s)
+                if m:
+                    return (m.group(1).strip(), "TimeTagger.py")
+                m2 = re.match(r"^VERSION\s*=\s*['\"]([^'\"]+)['\"]", s)
+                if m2:
+                    return (m2.group(1).strip(), "TimeTagger.py")
+    except (OSError, ValueError, TypeError):
+        pass
+
+    return (None, "unknown")
 
 
 def _looks_like_numpy_abi_failure(msg: str) -> bool:
@@ -58,8 +177,8 @@ def _load_timetagger():
                 "Swabian TimeTagger native module (_TimeTagger) does not match this environment's NumPy ABI."
             ) from None
         raise ImportError(
-            "Swabian device support requires the optional Swabian Python driver. "
-            "Install extras with: pip install \"pytimetag[swabian]\""
+            "Swabian device support requires the optional Swabian Python driver. Install with: "
+            f"{recommended_pip_command('install', 'pytimetag[swabian]')}"
         ) from e
     return TimeTagger
 

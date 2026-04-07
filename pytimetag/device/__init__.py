@@ -18,8 +18,6 @@ from pytimetag.device.datablock_packer import (
     feed_callback_for_simulator,
     pack_timestamps_channels_to_content,
 )
-from pytimetag.device.SwabianTimeTag import SwabianTimeTag, SwabianTimeTagFactory
-
 __all__ = [
     'DeviceInfo',
     'TimeTagDevice',
@@ -30,8 +28,6 @@ __all__ = [
     'MAX_PACKED_CHANNELS',
     'ChannelSettings',
     'TimeTagSimulator',
-    'SwabianTimeTag',
-    'SwabianTimeTagFactory',
     'DataBlockPackerPath',
     'DataBlockStreamPacker',
     'SplitByChannelEvent',

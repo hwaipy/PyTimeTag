@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type
 
 import numpy as np
 
@@ -47,6 +47,24 @@ class DeviceTypeManager:
             dataUpdate=dataUpdate,
             **kwargs,
         )
+
+    def create_device_for_cli_source(
+        self,
+        source: str,
+        args: Any,
+        console: Any,
+        live: Any,
+        on_words: Callable[..., None],
+    ) -> Optional[TimeTagDevice]:
+        """
+        Load the CLI plugin for *source* and build the device (simulator is not handled here).
+
+        Returns ``None`` if the plugin aborted setup (e.g. printed help and exited early).
+        """
+        from pytimetag.device.source_registry import import_cli_plugin
+
+        mod = import_cli_plugin(source)
+        return mod.create_device(self, args, console, live, on_words)
 
 
 device_type_manager = DeviceTypeManager()
