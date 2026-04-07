@@ -3,14 +3,17 @@ import os
 import sys
 import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
+from pytimetag.analysers.CounterAnalyser import CounterAnalyser
+from pytimetag.analysers.HistogramAnalyser import HistogramAnalyser
 from pytimetag.datablock import DataBlock
 from pytimetag.device import TimeTagSimulator, device_type_manager
 from pytimetag.device.datablock_packer import (
@@ -96,7 +99,12 @@ def _ensure_output_path(base_dir: Path, block: DataBlock) -> Path:
 
 
 def _build_block_count_table(
-    block: DataBlock, seq: int, channel_count: int, output_path: Path = None
+    block: DataBlock,
+    seq: int,
+    channel_count: int,
+    output_path: Path = None,
+    operation_timings: List[Tuple[str, Optional[float]]] = None,
+    errors: List[str] = None,
 ) -> Table:
     table = Table(
         title=f"DataBlock #{seq}",
@@ -106,13 +114,47 @@ def _build_block_count_table(
     )
     table.add_column("Channel")
     table.add_column("Count", justify="right")
+    table.add_column("Operation")
+    table.add_column("Time (ms)", justify="right")
+    op_rows = operation_timings[:] if operation_timings else []
     total_count = 0
     for ch in range(channel_count):
         cnt = block.sizes[ch]
         c = int(cnt)
         total_count += c
-        table.add_row(str(ch), f"{c:,}")
-    table.add_row("TOTAL", f"{total_count:,}", style="bold green")
+        if op_rows:
+            op_name, op_ms = op_rows.pop(0)
+            if op_name in ("analyser:", "analysers:"):
+                time_text = ""
+            elif op_ms is None:
+                time_text = "disabled"
+            else:
+                time_text = f"{op_ms:.3f}"
+            table.add_row(str(ch), f"{c:,}", op_name, time_text)
+        else:
+            table.add_row(str(ch), f"{c:,}", "", "")
+    if op_rows:
+        op_name, op_ms = op_rows.pop(0)
+        if op_name in ("analyser:", "analysers:"):
+            time_text = ""
+        elif op_ms is None:
+            time_text = "disabled"
+        else:
+            time_text = f"{op_ms:.3f}"
+        table.add_row("TOTAL", f"{total_count:,}", op_name, time_text, style="bold green")
+    else:
+        table.add_row("TOTAL", f"{total_count:,}", "", "", style="bold green")
+    for op_name, op_ms in op_rows:
+        if op_name in ("analyser:", "analysers:"):
+            time_text = ""
+        elif op_ms is None:
+            time_text = "disabled"
+        else:
+            time_text = f"{op_ms:.3f}"
+        table.add_row("", "", op_name, time_text)
+    if errors:
+        for err in errors:
+            table.add_row("", "", f"[red]{err}[/red]", "")
     if output_path is None:
         table.caption = "Storage: disabled"
     else:
@@ -145,6 +187,12 @@ def main() -> None:
     parser.add_argument("--split-channel", type=int, default=0, help="Trigger channel index for --split-mode channel")
     parser.add_argument("--channel-count", type=int, default=8, help="Active channel count used by source")
     parser.add_argument("--resolution", type=float, default=1e-12, help="Seconds per tick")
+    parser.add_argument(
+        "--post-process",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable/disable post-processing analysers (default: enabled)",
+    )
     parser.add_argument("--serial", default=None, help="Hardware device serial (when using a hardware --source)")
     parser.add_argument("--seed", type=int, default=42, help="Simulator RNG seed")
     parser.add_argument("--update-lo-s", type=float, default=0.05, help="Simulator update interval lower bound")
@@ -216,20 +264,97 @@ def main() -> None:
 
     block_seq = 0
     render_lock = threading.Lock()
+    worker_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="post-process")
+    io_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="save-datablock")
+    pending_futures: List[Future] = []
+    registered_analysers: List[Tuple[str, object]] = [
+        ("CounterAnalyser", CounterAnalyser()),
+        ("HistogramAnalyser", HistogramAnalyser(args.channel_count)),
+    ]
+    for analyser_name, analyser in registered_analysers:
+        if analyser_name == "CounterAnalyser":
+            analyser.turnOn()
     latest_table = Table(title="Waiting for first DataBlock...", show_header=False)
     latest_table.add_column("Status")
     latest_table.add_row("Running...")
 
+    def _serialize_block(block: DataBlock) -> Tuple[bytes, float]:
+        start = time.perf_counter()
+        payload = block.serialize()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return payload, elapsed_ms
+
+    def _save_block_file(path: Path, payload: bytes) -> float:
+        start = time.perf_counter()
+        path.write_bytes(payload)
+        return (time.perf_counter() - start) * 1000.0
+
+    def _process_and_render_block(block: DataBlock, seq: int, out_path: Path, live: Live) -> None:
+        operation_timings: List[Tuple[str, Optional[float]]] = []
+        analyser_timings: List[Tuple[str, float]] = []
+        errors: List[str] = []
+        payload: bytes = b""
+        payload_ready = False
+        serialize_ms: float = None
+        save_ms: float = None
+
+        if args.save:
+            try:
+                payload, serialize_ms = _serialize_block(block)
+                payload_ready = True
+            except BaseException as e:
+                errors.append(f"serialize failed: {e}")
+
+        save_future: Future = None
+        if args.save and out_path is not None and payload_ready:
+            try:
+                save_future = io_pool.submit(_save_block_file, out_path, payload)
+            except BaseException as e:
+                errors.append(f"schedule save failed: {e}")
+
+        for analyser_name, analyser in registered_analysers:
+            if args.post_process and analyser.isTurnedOn():
+                start = time.perf_counter()
+                try:
+                    analyser.dataIncome(block)
+                except BaseException as e:
+                    errors.append(f"{analyser_name} failed: {e}")
+                finally:
+                    analyser_timings.append((f"  {analyser_name}", (time.perf_counter() - start) * 1000.0))
+            else:
+                analyser_timings.append((f"  {analyser_name}", None))
+
+        if save_future is not None:
+            try:
+                save_ms = save_future.result()
+            except BaseException as e:
+                errors.append(f"save failed: {e}")
+
+        if args.save:
+            operation_timings.append(("serialize", serialize_ms))
+            operation_timings.append(("storage", save_ms))
+        else:
+            operation_timings.append(("serialize", None))
+            operation_timings.append(("storage", None))
+        operation_timings.append(("analysers:", None))
+        operation_timings.extend(analyser_timings)
+
+        table = _build_block_count_table(
+            block,
+            seq,
+            args.channel_count,
+            out_path,
+            operation_timings=operation_timings,
+            errors=errors,
+        )
+        with render_lock:
+            live.update(table, refresh=True)
+
     def handle_block(block: DataBlock, live: Live) -> None:
         nonlocal block_seq
         block_seq += 1
-        out_path = None
-        if args.save:
-            out_path = _ensure_output_path(output_base, block)
-            out_path.write_bytes(block.serialize())
-        table = _build_block_count_table(block, block_seq, args.channel_count, out_path)
-        with render_lock:
-            live.update(table, refresh=True)
+        out_path = _ensure_output_path(output_base, block) if args.save else None
+        pending_futures.append(worker_pool.submit(_process_and_render_block, block, block_seq, out_path, live))
 
     def on_words(words, live: Live) -> None:
         produced = packer.feed_from_packed(words)
@@ -244,6 +369,11 @@ def main() -> None:
         console.print(f"Output directory: [cyan]{output_base}[/cyan]")
     else:
         console.print("Output directory: [dim]disabled (use --save to enable)[/dim]")
+    if args.post_process:
+        analyser_names = ", ".join(name for name, _ in registered_analysers)
+        console.print(f"PostProcess: [green]enabled[/green] ({analyser_names})")
+    else:
+        console.print("PostProcess: [dim]disabled[/dim]")
     console.print(f"Split mode: [cyan]{args.split_mode}[/cyan] ({split_desc}), resolution: [cyan]{args.resolution}s/tick[/cyan]")
     with Live(
         latest_table,
@@ -301,6 +431,13 @@ def main() -> None:
             for _, blocks in tail.items():
                 for b in blocks:
                     handle_block(b, live)
+            for future in pending_futures:
+                try:
+                    future.result()
+                except BaseException:
+                    pass
+            worker_pool.shutdown(wait=True)
+            io_pool.shutdown(wait=True)
             console.print("[bold green]Stopped.[/bold green]")
 
 
