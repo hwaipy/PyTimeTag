@@ -4,3 +4,4 @@ msgpack
 wrapt_timeout_decorator
 coverage
 duckdb
+tzdata

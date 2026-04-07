@@ -21,7 +21,8 @@ setuptools.setup(
         'msgpack',
         'numba',
         'rich',
-        'duckdb'
+        'duckdb',
+        'tzdata'
     ],
     extras_require={
         'swabian': [

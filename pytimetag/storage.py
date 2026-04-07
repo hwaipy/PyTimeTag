@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import duckdb
 
@@ -138,8 +138,11 @@ class Storage:
     def _load_timezone(tz_name: str):
         try:
             return ZoneInfo(tz_name)
-        except Exception:
-            return ZoneInfo(tz_name.upper())
+        except ZoneInfoNotFoundError as e:
+            raise RuntimeError(
+                f"Timezone '{tz_name}' is not available. "
+                "Install the 'tzdata' package on platforms without system IANA timezone data."
+            ) from e
 
     @staticmethod
     def __to_epoch_us(dt: datetime) -> int:
