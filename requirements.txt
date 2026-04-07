@@ -1,4 +1,4 @@
 numba
-numpy
+numpy>=1.25
 msgpack
 rich

@@ -2,7 +2,7 @@ import setuptools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
-version = '3.0.2'
+version = '3.0.3'
 
 setuptools.setup(
     name='pytimetag',
@@ -17,7 +17,7 @@ setuptools.setup(
     keywords=['timetag', 'physics'],
     packages=setuptools.find_packages(),
     install_requires=[
-        'numpy',
+        'numpy>=1.25',  # NumPy 2.x recommended
         'msgpack',
         'numba',
         'rich'
@@ -25,7 +25,6 @@ setuptools.setup(
     extras_require={
         'swabian': [
             'Swabian-TimeTagger',
-            'numpy>=1.25,<2',
         ],
     },
     entry_points={

@@ -12,16 +12,18 @@ from pytimetag.device.base import DeviceInfo, TimeTagDevice, TimeTagDeviceFactor
 from pytimetag.device.manager import device_type_manager
 
 
+class SwabianNumPyABIError(ImportError):
+    """Raised when the Swabian ``_TimeTagger`` extension does not match the installed NumPy ABI."""
+
+
 def _load_timetagger():
     try:
         import TimeTagger  # type: ignore
     except Exception as e:
         msg = str(e)
         if "_ARRAY_API" in msg or "numpy.core.multiarray failed to import" in msg:
-            raise ImportError(
-                "Swabian TimeTagger binary is not compatible with current NumPy runtime. "
-                "Detected a NumPy ABI mismatch (typically NumPy 2.x with a module built for NumPy 1.x). "
-                "Please install a compatible NumPy, e.g. `pip install \"numpy>=1.25,<2\"` in this environment."
+            raise SwabianNumPyABIError(
+                "Swabian TimeTagger native module is incompatible with the current NumPy (ABI mismatch)."
             ) from e
         raise ImportError(
             "Swabian device support requires the optional Swabian Python driver. "

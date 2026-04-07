@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import threading
 import time
 from datetime import datetime
@@ -12,6 +13,7 @@ from rich.table import Table
 
 from pytimetag.datablock import DataBlock
 from pytimetag.device import TimeTagSimulator, device_type_manager
+from pytimetag.device.SwabianTimeTag import SwabianNumPyABIError
 from pytimetag.device.datablock_packer import (
     DataBlockPackerPath,
     DataBlockStreamPacker,
@@ -81,6 +83,28 @@ def _parse_channel_scalar(items: List[str], channel_count: int, option_name: str
             raise ValueError(f"Channel index out of range in {option_name}: {idx}, valid 0..{channel_count - 1}")
         out[idx] = float(value_str.strip())
     return out
+
+
+def _print_swabian_numpy_abi_help(console: Console) -> None:
+    """After a Swabian/NumPy ABI failure, print a short, actionable fix (no traceback)."""
+    console.print()
+    console.print("[bold red]Swabian TimeTagger / NumPy ABI mismatch[/bold red]")
+    console.print(
+        "The loaded Swabian driver was built for NumPy 1.x, but this environment has NumPy 2.x "
+        "(or the reverse), so [cyan]_TimeTagger[/cyan] cannot load."
+    )
+    console.print()
+    console.print("[bold]Option A — stay on NumPy 2.x[/bold] (upgrade the driver; try in order):")
+    console.print("  [cyan]pip install -U \"Swabian-TimeTagger\"[/cyan]")
+    console.print(
+        "  Update the [cyan]Swabian Instruments Time Tagger[/cyan] desktop install to the latest version. "
+        "If Python still imports [cyan]TimeTagger[/cyan] from [dim]Program Files[/dim], that copy may be older "
+        "than the pip wheel; check Swabian’s docs for which path should win."
+    )
+    console.print()
+    console.print("[bold]Option B — use NumPy 1.x in this environment[/bold] (works with older drivers):")
+    console.print("  [cyan]pip install \"numpy>=1.25,<2\"[/cyan]")
+    console.print()
 
 
 def _discover_swabian_info(serial: str = None) -> Tuple[str, List[str]]:
@@ -294,4 +318,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SwabianNumPyABIError:
+        _print_swabian_numpy_abi_help(Console(stderr=True))
+        sys.exit(1)

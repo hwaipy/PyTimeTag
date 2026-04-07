@@ -1,5 +1,5 @@
 numba
-numpy
+numpy>=1.25
 msgpack
 sphinx
 sphinx-rtd-theme
