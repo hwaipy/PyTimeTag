@@ -1,0 +1,107 @@
+# After the "Tests" workflow succeeds on a push to the default branch, publish to PyPI
+# only when setup.py version is greater than the version on PyPI.
+name: Publish to PyPI (post-tests, version bump)
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types:
+      - completed
+
+jobs:
+  publish-if-version-bumped:
+    runs-on: ubuntu-latest
+    # Tests must succeed; only pushes to the default branch (not PR CI)
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout commit that passed Tests
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compare local version to PyPI
+        id: version
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install packaging
+          python << 'PY'
+          import ast
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          from packaging.version import Version
+
+          def local_version() -> Version:
+              with open("setup.py", encoding="utf-8") as f:
+                  tree = ast.parse(f.read())
+              for node in tree.body:
+                  if not isinstance(node, ast.Assign):
+                      continue
+                  for t in node.targets:
+                      if isinstance(t, ast.Name) and t.id == "version":
+                          v = node.value
+                          if isinstance(v, ast.Constant) and isinstance(v.value, str):
+                              return Version(v.value)
+                          if isinstance(v, ast.Str):
+                              return Version(v.s)
+              raise SystemExit("Could not find version = '...' in setup.py")
+
+          def pypi_version():
+              url = "https://pypi.org/pypi/pytimetag/json"
+              try:
+                  with urllib.request.urlopen(url, timeout=60) as r:
+                      data = json.load(r)
+                  return Version(data["info"]["version"])
+              except urllib.error.HTTPError as e:
+                  if e.code == 404:
+                      return None
+                  raise
+
+          loc = local_version()
+          rem = pypi_version()
+          if rem is None:
+              publish = True
+              note = "package not yet on PyPI"
+          else:
+              publish = loc > rem
+              note = f"local {loc} vs PyPI {rem}"
+
+          print(f"::notice title=Version check::{note}")
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a", encoding="utf-8") as fh:
+              fh.write(f"publish={'true' if publish else 'false'}\n")
+              fh.write(f"local_version={loc}\n")
+              fh.write(f"pypi_version={rem or 'none'}\n")
+          PY
+
+      - name: Install build tools
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          python -m pip install setuptools wheel twine
+
+      - name: Build and upload to PyPI
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          python setup.py sdist bdist_wheel
+          python -m twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI }}
+
+      - name: Skip publish (version not bumped)
+        if: steps.version.outputs.publish != 'true'
+        run: |
+          echo "Skipping upload: setup.py version ${{ steps.version.outputs.local_version }} is not greater than PyPI (${{ steps.version.outputs.pypi_version }})."
