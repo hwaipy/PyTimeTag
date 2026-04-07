@@ -33,7 +33,7 @@
 python -m pip install -U pytimetag
 ```
 
-安装完成后可使用入口命令 `pytimetag`，或：
+安装完成后可使用入口命令 `pytimetag`；不带参数时与 `--help` 类似，只打印说明、不启动采集。也可显式执行：
 
 ```bash
 python -m pytimetag --help
@@ -64,6 +64,10 @@ python -m pip install -e ".[swabian]"
 
 ## 命令行（`pytimetag`）概览
 
+**若不带任何参数**（命令行里在程序名后面什么也没有），程序**不会**启动采集：先打印完整用法（含英文 epilog），再在**标准输出末尾**附一段中文提示，提醒需指定 `--source` 或其它选项后才会真正运行。
+
+**说明**：`pytimetag -h` / `pytimetag --help` 同样只显示帮助、不采集；它们属于「带了参数」，与「程序名后完全空白」不同。
+
 查看全部参数：
 
 ```bash
@@ -74,7 +78,7 @@ pytimetag --help
 
 | 取值 | 含义 |
 |------|------|
-| `simulator`（默认） | 内置仿真器，无需硬件。 |
+| `simulator` | 内置仿真器，无需硬件。在**已提供至少一个命令行参数**且未写 `--source` 时，默认使用该值。 |
 | `swabian` | Swabian Instruments Time Tagger（需 `pip install "pytimetag[swabian]"` 及本机驱动；仅在选择该源时加载插件）。 |
 
 ### 常用参数
@@ -102,21 +106,23 @@ pytimetag --help
 
 以下示例在 Windows / Linux / macOS 上均可使用；请将 `pytimetag` 换成 `python -m pytimetag` 若你未把 Scripts 目录加入 PATH。
 
-### 1. 默认：仿真源，不落盘、不保存
+### 1. 不带参数：只显示帮助
 
 ```bash
 pytimetag
 ```
 
-等价于：
+不启动采集；效果与 `pytimetag --help` 接近（多一段文末中文提示），提醒需指定 `--source` 或其它选项。
+
+### 2. 仿真源，不落盘、不保存
 
 ```bash
 pytimetag --source simulator
 ```
 
-终端会显示实时表格；按 `Ctrl+C` 结束。
+终端会显示实时表格；按 `Ctrl+C` 结束。也可通过其它任意参数触发运行（例如下一节仅 `--save` 时未写 `--source` 也会默认用仿真器）。
 
-### 2. 指定保存目录并写入 DataBlock 文件
+### 3. 指定保存目录并写入 DataBlock 文件
 
 ```bash
 pytimetag --save --output-dir ./my_data
@@ -124,19 +130,19 @@ pytimetag --save --output-dir ./my_data
 
 文件会按块创建时间落在 `my_data/YYYY-MM-DD/HH/` 下，扩展名为 `.datablock`。
 
-### 3. 按时间切分：每 2 秒一块
+### 4. 按时间切分：每 2 秒一块
 
 ```bash
 pytimetag --split-s 2.0 --resolution 1e-12
 ```
 
-### 4. 按通道事件切分（例如通道 3 上发生事件时切块）
+### 5. 按通道事件切分（例如通道 3 上发生事件时切块）
 
 ```bash
 pytimetag --split-mode channel --split-channel 3
 ```
 
-### 5. 仿真器：自定义通道与随机种子
+### 6. 仿真器：自定义通道与随机种子
 
 默认仿真已对通道 0 使用 `Period`、其余通道 `Random`。若要显式改某一通道（例如通道 1 为 Random、50k 计数）：
 
@@ -146,7 +152,7 @@ pytimetag --channel "1:mode=Random,random_count=100000" --seed 123
 
 可多次 `--channel` 指定多个索引。
 
-### 6. 硬件：`swabian` 源（单台设备）
+### 7. 硬件：`swabian` 源（单台设备）
 
 ```bash
 pytimetag --source swabian --save --output-dir ./runs
@@ -154,19 +160,19 @@ pytimetag --source swabian --save --output-dir ./runs
 
 若本机只连一台 Time Tagger，通常无需 `--serial`。
 
-### 7. 硬件：多台设备时必须指定序列号
+### 8. 硬件：多台设备时必须指定序列号
 
 ```bash
 pytimetag --source swabian --serial YOUR_SERIAL_HERE
 ```
 
-### 8. 硬件：调大缓冲与轮询间隔（按插件语义）
+### 9. 硬件：调大缓冲与轮询间隔（按插件语义）
 
 ```bash
 pytimetag --source swabian --hardware-buffer-size 2000000 --hardware-poll-s 0.005
 ```
 
-### 9. 硬件：按通道设置触发电平与死时间（单位与驱动一致）
+### 10. 硬件：按通道设置触发电平与死时间（单位与驱动一致）
 
 ```bash
 pytimetag --source swabian --trigger-level "0:-0.2" --deadtime-s "1:5e-08"
@@ -190,6 +196,7 @@ from pytimetag.device.SwabianTimeTag import SwabianTimeTag
 
 | 现象 | 建议 |
 |------|------|
+| 只输入 `pytimetag` 没有开始采数 | 属预期行为：须带至少一个参数，例如 `pytimetag --source simulator` 或 `pytimetag --save`。 |
 | `Unknown device type` / 硬件源未注册 | 确认已 `pip install "pytimetag[swabian]"` 且 `--source` 拼写为 `swabian`。 |
 | 多设备报错要求 `--serial` | 使用 `--serial` 与设备管理器显示的序列号一致。 |
 | NumPy / `_TimeTagger` 导入错误 | 见上文「硬件与 NumPy」；优先升级 Swabian 软件与 pip 包，或降级 NumPy 至 1.x。 |

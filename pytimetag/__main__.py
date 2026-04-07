@@ -124,9 +124,15 @@ def main() -> None:
     source_choices = ["simulator"] + list_cli_hardware_sources()
     parser = argparse.ArgumentParser(
         description="Run a TimeTag app with the simulator or a registered hardware source, "
-        "split into DataBlocks, show counts with a live table, and serialize blocks."
+        "split into DataBlocks, show counts with a live table, and serialize blocks.",
+        epilog="With no arguments, only this help is shown; specify at least --source or other options to run.",
     )
-    parser.add_argument("--source", default="simulator", choices=source_choices, help="Data source type")
+    parser.add_argument(
+        "--source",
+        default="simulator",
+        choices=source_choices,
+        help="Data source type (default: %(default)s when any argument is given)",
+    )
     parser.add_argument("--output-dir", default="./store_test", help="Directory used to store serialized DataBlocks")
     parser.add_argument("--save", action="store_true", help="Enable saving serialized DataBlocks to output-dir")
     parser.add_argument("--split-s", type=float, default=1.0, help="DataBlock split window in seconds (default: 1.0)")
@@ -178,6 +184,13 @@ def main() -> None:
         default=[],
         help="Per-channel dead time in seconds for hardware-like sources, format INDEX:SECONDS (repeatable).",
     )
+    if len(sys.argv) <= 1:
+        parser.print_help()
+        print(
+            "\n提示：未提供任何参数，未启动采集。请至少指定 --source（例如 simulator 或 swabian）或 "
+            "其它选项（如 --save）；见上文说明。\n",
+        )
+        raise SystemExit(0)
     args = parser.parse_args()
 
     console = Console(file=sys.stdout, force_terminal=True)
