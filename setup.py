@@ -20,7 +20,8 @@ setuptools.setup(
         'numpy>=1.25',  # NumPy 2.x recommended
         'msgpack',
         'numba',
-        'rich'
+        'rich',
+        'duckdb'
     ],
     extras_require={
         'swabian': [
