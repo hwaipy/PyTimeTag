@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 import threading
 import time
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
@@ -16,15 +18,45 @@ class SwabianNumPyABIError(ImportError):
     """Raised when the Swabian ``_TimeTagger`` extension does not match the installed NumPy ABI."""
 
 
+def _looks_like_numpy_abi_failure(msg: str) -> bool:
+    """Detect NumPy C-API / ABI mismatch when loading Swabian's ``_TimeTagger``."""
+    if not msg:
+        return False
+    needles = (
+        "_ARRAY_API",
+        "numpy.core.multiarray failed to import",
+        "compiled using NumPy 1.x",
+        "cannot be run in",
+        "NumPy 2.2",
+        "NumPy 2.",
+        "must be compiled with NumPy 2.0",
+    )
+    if any(n in msg for n in needles):
+        return True
+    # Catch multi-line numpy warning text when coerced to str
+    if re.search(r"NumPy\s+1\.x.*NumPy\s+2", msg, re.DOTALL):
+        return True
+    return False
+
+
 def _load_timetagger():
+    # Avoid flooding stderr with NumPy ABI RuntimeWarnings when the extension mismatches NumPy 2.x.
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*A module that was compiled using NumPy 1\.x cannot be run in.*",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*Some module may need to rebuild instead.*",
+    )
     try:
         import TimeTagger  # type: ignore
     except Exception as e:
         msg = str(e)
-        if "_ARRAY_API" in msg or "numpy.core.multiarray failed to import" in msg:
+        if _looks_like_numpy_abi_failure(msg):
             raise SwabianNumPyABIError(
-                "Swabian TimeTagger native module is incompatible with the current NumPy (ABI mismatch)."
-            ) from e
+                "Swabian TimeTagger native module (_TimeTagger) does not match this environment's NumPy ABI."
+            ) from None
         raise ImportError(
             "Swabian device support requires the optional Swabian Python driver. "
             "Install extras with: pip install \"pytimetag[swabian]\""

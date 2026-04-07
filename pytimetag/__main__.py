@@ -90,20 +90,28 @@ def _print_swabian_numpy_abi_help(console: Console) -> None:
     console.print()
     console.print("[bold red]Swabian TimeTagger / NumPy ABI mismatch[/bold red]")
     console.print(
-        "The loaded Swabian driver was built for NumPy 1.x, but this environment has NumPy 2.x "
-        "(or the reverse), so [cyan]_TimeTagger[/cyan] cannot load."
+        "The [cyan]_TimeTagger[/cyan] extension (from Swabian’s driver) was built against one NumPy "
+        "ABI, but this interpreter has a different NumPy (often: driver built for NumPy 1.x, env has NumPy 2.x). "
+        "You cannot “rebuild” that binary yourself; fix the environment or use a newer driver."
     )
     console.print()
-    console.print("[bold]Option A — stay on NumPy 2.x[/bold] (upgrade the driver; try in order):")
-    console.print("  [cyan]pip install -U \"Swabian-TimeTagger\"[/cyan]")
-    console.print(
-        "  Update the [cyan]Swabian Instruments Time Tagger[/cyan] desktop install to the latest version. "
-        "If Python still imports [cyan]TimeTagger[/cyan] from [dim]Program Files[/dim], that copy may be older "
-        "than the pip wheel; check Swabian’s docs for which path should win."
-    )
-    console.print()
-    console.print("[bold]Option B — use NumPy 1.x in this environment[/bold] (works with older drivers):")
+    console.print("[bold]Fix 1 — match NumPy to an older driver (fastest in a venv)[/bold]")
     console.print("  [cyan]pip install \"numpy>=1.25,<2\"[/cyan]")
+    console.print("  Then run [cyan]pytimetag[/cyan] again. Use a dedicated venv if you need NumPy 2 for other projects.")
+    console.print()
+    console.print("[bold]Fix 2 — reinstall / refresh the Swabian Python package (may ship NumPy-2-compatible wheels)[/bold]")
+    console.print("  [cyan]pip install --upgrade --force-reinstall --no-cache-dir \"Swabian-TimeTagger\"[/cyan]")
+    console.print(
+        "  Also update the [cyan]Swabian Instruments Time Tagger[/cyan] application. "
+        "If imports still come from [dim]…\\Program Files\\Swabian Instruments\\…[/dim], that build may lag the pip wheel; "
+        "see Swabian’s docs for PYTHONPATH / which copy Python loads."
+    )
+    console.print()
+    console.print("[bold]Fix 3 — stay on NumPy 2.x[/bold]")
+    console.print(
+        "  You need a [cyan]_TimeTagger[/cyan] build compiled for NumPy 2 (from a newer Swabian release or wheel). "
+        "If none is available yet, use Fix 1 in this environment."
+    )
     console.print()
 
 
@@ -207,7 +215,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    console = Console()
+    console = Console(file=sys.stdout, force_terminal=True)
     output_base = Path(args.output_dir).resolve()
     if args.save:
         output_base.mkdir(parents=True, exist_ok=True)
@@ -258,7 +266,13 @@ def main() -> None:
     else:
         console.print("Output directory: [dim]disabled (use --save to enable)[/dim]")
     console.print(f"Split mode: [cyan]{args.split_mode}[/cyan] ({split_desc}), resolution: [cyan]{args.resolution}s/tick[/cyan]")
-    with Live(latest_table, console=console, refresh_per_second=8) as live:
+    with Live(
+        latest_table,
+        console=console,
+        refresh_per_second=8,
+        redirect_stdout=False,
+        redirect_stderr=False,
+    ) as live:
         channel_settings = _parse_channel_settings(args.channel, args.channel_count)
         trigger_levels = _parse_channel_scalar(args.trigger_level, args.channel_count, "--trigger-level")
         deadtimes = _parse_channel_scalar(args.deadtime_s, args.channel_count, "--deadtime-s")
@@ -278,17 +292,21 @@ def main() -> None:
             for i in range(1, args.channel_count):
                 device.set_channel(i, mode="Random", random_count=50_000, threshold_voltage=-1.0, reference_pulse_v=1.0)
         else:
-            serial, available = _discover_swabian_info(args.serial)
-            console.print(f"Swabian serial: [cyan]{serial}[/cyan] (available: {', '.join(available)})")
-            device = device_type_manager.connect(
-                "swabian",
-                serial_number=serial,
-                dataUpdate=lambda words: on_words(words, live),
-                channel_count=args.channel_count,
-                resolution=args.resolution,
-                n_max_events=args.swabian_buffer_size,
-                poll_interval_s=args.swabian_poll_s,
-            )
+            try:
+                serial, available = _discover_swabian_info(args.serial)
+                console.print(f"Swabian serial: [cyan]{serial}[/cyan] (available: {', '.join(available)})")
+                device = device_type_manager.connect(
+                    "swabian",
+                    serial_number=serial,
+                    dataUpdate=lambda words: on_words(words, live),
+                    channel_count=args.channel_count,
+                    resolution=args.resolution,
+                    n_max_events=args.swabian_buffer_size,
+                    poll_interval_s=args.swabian_poll_s,
+                )
+            except SwabianNumPyABIError:
+                _print_swabian_numpy_abi_help(console)
+                return
 
         for idx, cfg in channel_settings.items():
             device.set_channel(idx, **cfg)
