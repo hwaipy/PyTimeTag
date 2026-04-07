@@ -1,20 +1,14 @@
-.. PyTimeTag documentation master file, created by
-   sphinx-quickstart on Fri Jun 21 09:29:11 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+PyTimeTag Documentation
+=======================
 
-Welcome to PyTimeTag's documentation!
-=====================================
+PyTimeTag provides Python APIs and a CLI for TimeTag data capture, splitting,
+serialization, and quick analysis workflows.
+
+English is the primary language of this documentation.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Languages
 
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+   en/index
+   zh_CN/index

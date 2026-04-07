@@ -1,38 +1,52 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+"""Sphinx configuration for the PyTimeTag documentation."""
 
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+from datetime import datetime
 
-project = 'PyTimeTag'
-copyright = '2024, Hwaipy'
-author = 'Hwaipy'
-
-release = '0.1.0'
-version = '0.1.0'
-
-# -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+project = "PyTimeTag"
+author = "Hwaipy"
+copyright = f"{datetime.now().year}, {author}"
+release = "3.0.6"
+version = release
 
 extensions = [
-    'sphinx.ext.duration',
-    'sphinx.ext.doctest',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary',
-    'autoapi.extension',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.intersphinx",
+    "autoapi.extension",
 ]
-autosummary_generate = True  # Turn on sphinx.ext.autosummary
-autoapi_dirs = ['../../pytimetag']
 
-templates_path = ['_templates']
-exclude_patterns = []
+templates_path = ["_templates"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+language = "en"
+locale_dirs = ["locale/"]
+gettext_compact = False
 
-html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
+autosummary_generate = True
+autodoc_member_order = "bysource"
+autodoc_typehints = "description"
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
 
-locale_dirs = ['locale/']   # path is example but recommended.
+autoapi_type = "python"
+autoapi_dirs = ["../../pytimetag"]
+autoapi_root = "api"
+autoapi_member_order = "bysource"
+autoapi_keep_files = False
+autoapi_options = [
+    "members",
+    "undoc-members",
+    "show-inheritance",
+    "show-module-summary",
+]
+
+html_theme = "furo"
+html_title = "PyTimeTag Documentation"
+html_static_path = ["_static"]
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+}

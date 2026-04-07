@@ -2,6 +2,6 @@ numba
 numpy>=1.25
 msgpack
 sphinx
-sphinx-rtd-theme
+furo
 sphinx-autoapi
 sphinx-intl
