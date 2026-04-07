@@ -3,3 +3,4 @@ numpy>=1.25
 msgpack
 wrapt_timeout_decorator
 coverage
+duckdb

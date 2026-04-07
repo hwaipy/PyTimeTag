@@ -2,3 +2,4 @@ numba
 numpy>=1.25
 msgpack
 rich
+duckdb
