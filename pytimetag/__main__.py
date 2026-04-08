@@ -1,13 +1,15 @@
 import argparse
+import asyncio
 import os
 import sys
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import duckdb
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
@@ -15,6 +17,7 @@ from rich.table import Table
 from pytimetag.analysers.CounterAnalyser import CounterAnalyser
 from pytimetag.analysers.HistogramAnalyser import HistogramAnalyser
 from pytimetag.datablock import DataBlock
+from pytimetag.storage import Storage
 from pytimetag.device import TimeTagSimulator, device_type_manager
 from pytimetag.device.datablock_packer import (
     DataBlockPackerPath,
@@ -175,7 +178,18 @@ def main() -> None:
         choices=source_choices,
         help="Data source type (default: %(default)s when any argument is given)",
     )
-    parser.add_argument("--output-dir", default="./store_test", help="Directory used to store serialized DataBlocks")
+    parser.add_argument(
+        "--output-dir",
+        "--datablock-dir",
+        default="./store_test",
+        dest="datablock_dir",
+        help="Directory for serialized DataBlock files when --save is used (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--storage-db",
+        default="./store_test/pytimetag.duckdb",
+        help="DuckDB file path for post-process analyser results (default: %(default)s)",
+    )
     parser.add_argument("--save", action="store_true", help="Enable saving serialized DataBlocks to output-dir")
     parser.add_argument("--split-s", type=float, default=1.0, help="DataBlock split window in seconds (default: 1.0)")
     parser.add_argument(
@@ -242,9 +256,11 @@ def main() -> None:
     args = parser.parse_args()
 
     console = Console(file=sys.stdout, force_terminal=True)
-    output_base = Path(args.output_dir).resolve()
+    output_base = Path(args.datablock_dir).resolve()
     if args.save:
         output_base.mkdir(parents=True, exist_ok=True)
+
+    storage_db_path = Path(args.storage_db).resolve()
 
     if args.split_mode == "time":
         window_ticks = int(round(args.split_s / args.resolution))
@@ -257,6 +273,22 @@ def main() -> None:
             raise ValueError("--split-channel must be in 0..15")
         split_cfg = SplitByChannelEvent(args.split_channel)
         split_desc = f"channel={args.split_channel}"
+
+    storage_conn: Optional[duckdb.DuckDBPyConnection] = None
+    storage: Optional[Storage] = None
+    if args.post_process:
+        storage_db_path.parent.mkdir(parents=True, exist_ok=True)
+        storage_conn = duckdb.connect(str(storage_db_path))
+        storage = Storage(storage_conn, timezone="utc")
+
+    def _close_storage_conn() -> None:
+        nonlocal storage_conn
+        if storage_conn is not None:
+            try:
+                storage_conn.close()
+            except BaseException:
+                pass
+            storage_conn = None
 
     packer = DataBlockStreamPacker(
         [DataBlockPackerPath("stream", split_cfg, channel_count=16, resolution=args.resolution)]
@@ -291,7 +323,7 @@ def main() -> None:
 
     def _process_and_render_block(block: DataBlock, seq: int, out_path: Path, live: Live) -> None:
         operation_timings: List[Tuple[str, Optional[float]]] = []
-        analyser_timings: List[Tuple[str, float]] = []
+        analyser_timings: List[Tuple[str, Optional[float]]] = []
         errors: List[str] = []
         payload: bytes = b""
         payload_ready = False
@@ -312,15 +344,38 @@ def main() -> None:
             except BaseException as e:
                 errors.append(f"schedule save failed: {e}")
 
+        analyser_rows: List[Tuple[str, Optional[dict], Optional[float]]] = []
         for analyser_name, analyser in registered_analysers:
             if args.post_process and analyser.isTurnedOn():
                 start = time.perf_counter()
+                result: Optional[dict] = None
                 try:
-                    analyser.dataIncome(block)
+                    result = analyser.dataIncome(block)
                 except BaseException as e:
                     errors.append(f"{analyser_name} failed: {e}")
                 finally:
-                    analyser_timings.append((f"  {analyser_name}", (time.perf_counter() - start) * 1000.0))
+                    analyser_rows.append((analyser_name, result, (time.perf_counter() - start) * 1000.0))
+            else:
+                analyser_rows.append((analyser_name, None, None))
+
+        if storage is not None:
+            to_persist = [(n, r) for n, r, _ in analyser_rows if r is not None]
+            if to_persist:
+                try:
+                    end_s = block.dataTimeEnd * block.resolution
+                    fetch_time = datetime.fromtimestamp(end_s, tz=timezone.utc).isoformat()
+
+                    async def _persist() -> None:
+                        for name, doc in to_persist:
+                            await storage.append(name, doc, fetch_time)
+
+                    asyncio.run(_persist())
+                except BaseException as e:
+                    errors.append(f"storage append failed: {e}")
+
+        for analyser_name, result, elapsed_ms in analyser_rows:
+            if elapsed_ms is not None:
+                analyser_timings.append((f"  {analyser_name}", elapsed_ms))
             else:
                 analyser_timings.append((f"  {analyser_name}", None))
 
@@ -366,12 +421,13 @@ def main() -> None:
         f"[bold]TimeTag app started (source=[cyan]{args.source}[/cyan]). Press Ctrl+C to stop.[/bold]"
     )
     if args.save:
-        console.print(f"Output directory: [cyan]{output_base}[/cyan]")
+        console.print(f"DataBlock directory: [cyan]{output_base}[/cyan]")
     else:
-        console.print("Output directory: [dim]disabled (use --save to enable)[/dim]")
+        console.print("DataBlock directory: [dim]disabled (use --save to enable)[/dim]")
     if args.post_process:
         analyser_names = ", ".join(name for name, _ in registered_analysers)
         console.print(f"PostProcess: [green]enabled[/green] ({analyser_names})")
+        console.print(f"DuckDB storage: [cyan]{storage_db_path}[/cyan]")
     else:
         console.print("PostProcess: [dim]disabled[/dim]")
     console.print(f"Split mode: [cyan]{args.split_mode}[/cyan] ({split_desc}), resolution: [cyan]{args.resolution}s/tick[/cyan]")
@@ -405,6 +461,7 @@ def main() -> None:
                 args.source, args, console, live, on_words
             )
             if device is None:
+                _close_storage_conn()
                 return
 
         for idx, cfg in channel_settings.items():
@@ -438,6 +495,7 @@ def main() -> None:
                     pass
             worker_pool.shutdown(wait=True)
             io_pool.shutdown(wait=True)
+            _close_storage_conn()
             console.print("[bold green]Stopped.[/bold green]")
 
 
