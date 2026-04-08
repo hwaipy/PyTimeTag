@@ -1,10 +1,9 @@
 PyTimeTag Documentation
 =======================
 
-PyTimeTag provides Python APIs and a CLI for TimeTag data capture, splitting,
-serialization, and quick analysis workflows.
-
-English is the primary language of this documentation.
+PyTimeTag provides Python APIs and a CLI for time-tag capture, splitting into
+``DataBlock`` instances, serialization, light analysis, and optional DuckDB
+storage of analyser output.
 
 .. toctree::
    :maxdepth: 2
@@ -12,3 +11,5 @@ English is the primary language of this documentation.
 
    en/index
    zh_CN/index
+
+Build instructions: see ``docs/README.md``.

@@ -33,6 +33,7 @@ napoleon_numpy_docstring = True
 autoapi_type = "python"
 autoapi_dirs = ["../../pytimetag"]
 autoapi_root = "api"
+autoapi_add_toctree_entry = False
 autoapi_member_order = "bysource"
 autoapi_keep_files = False
 autoapi_options = [

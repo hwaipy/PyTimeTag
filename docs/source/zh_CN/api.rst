@@ -6,4 +6,4 @@ API 参考
 .. toctree::
    :maxdepth: 2
 
-   ../api/index
+   ../api/pytimetag/index

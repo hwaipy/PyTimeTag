@@ -1,13 +1,16 @@
 中文文档
 ========
 
-这是 PyTimeTag 的中文文档入口。
+以下为按主题划分的文档目录；建议从「简介」开始阅读。
 
 .. toctree::
    :maxdepth: 2
-   :caption: 使用指南
+   :caption: 目录
 
-   installation
+   introduction
    quickstart
    cli
+   offline_processing
+   extending
+   datablock_format
    api

@@ -1,13 +1,16 @@
-English Documentation
-=====================
+English documentation
+=======================
 
-This is the primary language site for PyTimeTag.
+Table of contents; start with **Introduction**.
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide
+   :caption: Contents
 
-   installation
+   introduction
    quickstart
    cli
+   offline_processing
+   extending
+   datablock_format
    api
