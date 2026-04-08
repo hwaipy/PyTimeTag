@@ -132,3 +132,28 @@ dmypy.json
 .idea
 .DS_Store
 *.ini
+*.datablock
+
+# IDE/editor
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+
+# Node.js / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Quasar/Vite build artifacts
+webui/.quasar/
+webui/dist/
+webui/.q-cache/
+webui_dist/
+
+store_test

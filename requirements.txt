@@ -4,3 +4,9 @@ msgpack
 rich
 duckdb
 tzdata
+fastapi
+uvicorn
+celery
+redis
+websockets
+wsproto

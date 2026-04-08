@@ -166,6 +166,16 @@ def _build_block_count_table(
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "gui":
+        from pytimetag.gui.launcher import run_gui_server
+
+        gui_parser = argparse.ArgumentParser(description="Start PyTimeTag Web GUI server.")
+        gui_parser.add_argument("--host", default="127.0.0.1", help="Host for GUI server (default: %(default)s)")
+        gui_parser.add_argument("--port", type=int, default=8787, help="Port for GUI server (default: %(default)s)")
+        gui_args = gui_parser.parse_args(sys.argv[2:])
+        run_gui_server(host=gui_args.host, port=gui_args.port)
+        return
+
     source_choices = ["simulator"] + list_cli_hardware_sources()
     parser = argparse.ArgumentParser(
         description="Run a TimeTag app with the simulator or a registered hardware source, "

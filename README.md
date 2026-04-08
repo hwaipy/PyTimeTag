@@ -86,6 +86,70 @@ pytimetag --save --storage-db ./analytics/run.duckdb
 
 ---
 
+## Web GUI（Vue + Quasar）
+
+已提供内置 GUI 服务端（FastAPI + WebSocket + Celery）与前端工程骨架（`webui/`）。
+
+启动 API + GUI（默认仅监听本机 `127.0.0.1:8787`）：
+
+```bash
+pytimetag gui --host 127.0.0.1 --port 8787
+```
+
+离线任务使用 Celery，需单独启动 worker（默认 Redis）：
+
+```bash
+celery -A pytimetag.gui.worker:celery_app worker --loglevel=INFO
+```
+
+若控制台出现 `No supported WebSocket library detected`，请补装：
+
+```bash
+python -m pip install websockets wsproto
+```
+
+前端源码在 `webui/`（Quasar）：
+
+```bash
+cd webui
+npm install
+npm run dev
+npm run build
+```
+
+`npm run build` 产物将输出到 `pytimetag/gui/webui_dist/`，并可随 `pip` 安装包一起发布。
+
+关键接口：
+
+- `GET /api/v1/meta`
+- `GET /api/v1/sources`
+- `GET /api/v1/session/status`
+- `POST /api/v1/session/start`
+- `POST /api/v1/session/stop`
+- `GET /api/v1/analyzers`
+- `PUT /api/v1/analyzers/{name}`
+- `GET /api/v1/settings`
+- `PUT /api/v1/settings`
+- `GET /api/v1/datablocks`
+- `POST /api/v1/offline/process`
+- `GET /api/v1/jobs`
+- `GET /api/v1/jobs/{job_id}`
+- `GET /api/v1/logs`
+- `WS /ws/metrics`
+- `WS /ws/logs`
+- `GET /healthz`
+- `GET /readyz`
+
+Docker 一键启动（Redis + API + Worker）：
+
+```bash
+docker compose up --build
+```
+
+默认访问：`http://127.0.0.1:8787`
+
+---
+
 ## 作为库使用
 
 安装后可 `import pytimetag`，使用 `DataBlock`、`device_type_manager`、`TimeTagSimulator` 等。Swabian 设备类需从子模块导入（不会随 `import pytimetag.device` 自动加载）：

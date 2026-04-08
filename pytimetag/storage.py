@@ -136,11 +136,15 @@ class Storage:
 
     @staticmethod
     def _load_timezone(tz_name: str):
+        normalized = str(tz_name).strip()
+        # zoneinfo databases commonly use canonical "UTC" key.
+        if normalized.lower() == "utc":
+            normalized = "UTC"
         try:
-            return ZoneInfo(tz_name)
+            return ZoneInfo(normalized)
         except ZoneInfoNotFoundError as e:
             raise RuntimeError(
-                f"Timezone '{tz_name}' is not available. "
+                f"Timezone '{normalized}' is not available. "
                 "Install the 'tzdata' package on platforms without system IANA timezone data."
             ) from e
 

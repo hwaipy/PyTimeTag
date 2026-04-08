@@ -1,0 +1,23 @@
+{
+  "name": "pytimetag-webui",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "quasar dev",
+    "build": "quasar build",
+    "lint": "eslint \"src/**/*.{js,vue}\""
+  },
+  "dependencies": {
+    "@quasar/extras": "^1.16.12",
+    "echarts": "^5.5.1",
+    "pinia": "^2.1.7",
+    "quasar": "^2.17.0",
+    "vue": "^3.4.38",
+    "vue-router": "^4.4.3"
+  },
+  "devDependencies": {
+    "@quasar/app-vite": "^1.10.0",
+    "eslint": "^8.57.1"
+  }
+}
+

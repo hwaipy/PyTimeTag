@@ -16,13 +16,23 @@ setuptools.setup(
     url='https://github.com/hwaipy/PyTimeTag',
     keywords=['timetag', 'physics'],
     packages=setuptools.find_packages(),
+    include_package_data=True,
+    package_data={
+        "pytimetag.gui": ["webui_dist/**/*"],
+    },
     install_requires=[
         'numpy>=1.25',  # NumPy 2.x recommended
         'msgpack',
         'numba',
         'rich',
         'duckdb',
-        'tzdata'
+        'tzdata',
+        'fastapi',
+        'uvicorn',
+        'celery',
+        'redis',
+        'websockets',
+        'wsproto',
     ],
     extras_require={
         'swabian': [
