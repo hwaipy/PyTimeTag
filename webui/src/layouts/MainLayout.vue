@@ -1,6 +1,13 @@
 <template>
   <q-layout view="lHh Lpr lFf">
     <q-header elevated>
+      <q-linear-progress
+        v-show="store.isLoading || store.loadingProgress > 0"
+        :value="store.loadingProgress"
+        color="accent"
+        track-color="transparent"
+        class="absolute-top"
+      />
       <q-toolbar>
         <q-btn flat dense round icon="menu" @click="leftDrawerOpen = !leftDrawerOpen" />
         <q-toolbar-title>PyTimeTag GUI</q-toolbar-title>

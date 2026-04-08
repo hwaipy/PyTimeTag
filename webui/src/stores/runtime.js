@@ -11,14 +11,51 @@ export const useRuntimeStore = defineStore("runtime", {
     analyzers: {},
     settings: {},
     logs: [],
+    datablocksLimit: 50,
+    jobsLimit: 50,
+    logsLimit: 50,
+    loadingCount: 0,
+    loadingProgress: 0,
   }),
+  getters: {
+    isLoading: (state) => state.loadingCount > 0,
+  },
   actions: {
+    _startLoading() {
+      this.loadingCount += 1;
+      if (this.loadingCount === 1) {
+        this.loadingProgress = 0.1;
+      } else {
+        this.loadingProgress = Math.min(0.85, this.loadingProgress + 0.12);
+      }
+    },
+    _endLoading() {
+      this.loadingCount = Math.max(0, this.loadingCount - 1);
+      if (this.loadingCount === 0) {
+        this.loadingProgress = 1;
+        setTimeout(() => {
+          if (this.loadingCount === 0) this.loadingProgress = 0;
+        }, 180);
+      }
+    },
+    async _request(url, options) {
+      this._startLoading();
+      try {
+        const res = await fetch(url, options);
+        if (!res.ok) {
+          throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+        }
+        return res;
+      } finally {
+        this._endLoading();
+      }
+    },
     async fetchSession() {
-      const res = await fetch(`${API_BASE}/session/status`);
+      const res = await this._request(`${API_BASE}/session/status`);
       this.session = await res.json();
     },
     async startSession() {
-      await fetch(`${API_BASE}/session/start`, {
+      await this._request(`${API_BASE}/session/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: "simulator" }),
@@ -26,33 +63,41 @@ export const useRuntimeStore = defineStore("runtime", {
       await this.fetchSession();
     },
     async stopSession() {
-      await fetch(`${API_BASE}/session/stop`, { method: "POST" });
+      await this._request(`${API_BASE}/session/stop`, { method: "POST" });
       await this.fetchSession();
     },
-    async fetchDatablocks() {
-      const res = await fetch(`${API_BASE}/datablocks?limit=50`);
+    async fetchDatablocks(limit = this.datablocksLimit) {
+      this.datablocksLimit = limit;
+      const res = await this._request(`${API_BASE}/datablocks?limit=${this.datablocksLimit}`);
       const data = await res.json();
       this.datablocks = data.items || [];
     },
+    async loadMoreDatablocks(step = 50) {
+      await this.fetchDatablocks(this.datablocksLimit + step);
+    },
     async processDatablock(path) {
-      const res = await fetch(`${API_BASE}/offline/process`, {
+      const res = await this._request(`${API_BASE}/offline/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ datablock_path: path }),
       });
       return await res.json();
     },
-    async fetchJobs() {
-      const res = await fetch(`${API_BASE}/jobs?limit=50`);
+    async fetchJobs(limit = this.jobsLimit) {
+      this.jobsLimit = limit;
+      const res = await this._request(`${API_BASE}/jobs?limit=${this.jobsLimit}`);
       const data = await res.json();
       this.jobs = data.items || [];
     },
+    async loadMoreJobs(step = 50) {
+      await this.fetchJobs(this.jobsLimit + step);
+    },
     async fetchAnalyzers() {
-      const res = await fetch(`${API_BASE}/analyzers`);
+      const res = await this._request(`${API_BASE}/analyzers`);
       this.analyzers = await res.json();
     },
     async updateAnalyzer(name, enabled, config) {
-      await fetch(`${API_BASE}/analyzers/${name}`, {
+      await this._request(`${API_BASE}/analyzers/${name}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled, config }),
@@ -60,22 +105,26 @@ export const useRuntimeStore = defineStore("runtime", {
       await this.fetchAnalyzers();
     },
     async fetchSettings() {
-      const res = await fetch(`${API_BASE}/settings`);
+      const res = await this._request(`${API_BASE}/settings`);
       const data = await res.json();
       this.settings = data.settings || {};
     },
     async saveSettings() {
-      await fetch(`${API_BASE}/settings`, {
+      await this._request(`${API_BASE}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ settings: this.settings }),
       });
       await this.fetchSettings();
     },
-    async fetchLogs() {
-      const res = await fetch(`${API_BASE}/logs?limit=200`);
+    async fetchLogs(limit = this.logsLimit) {
+      this.logsLimit = limit;
+      const res = await this._request(`${API_BASE}/logs?limit=${this.logsLimit}`);
       const data = await res.json();
       this.logs = data.items || [];
+    },
+    async loadMoreLogs(step = 50) {
+      await this.fetchLogs(this.logsLimit + step);
     },
     connectMetrics() {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";

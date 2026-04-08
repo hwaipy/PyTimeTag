@@ -1,18 +1,12 @@
-import MainLayout from "../layouts/MainLayout.vue";
-import IndexPage from "../pages/IndexPage.vue";
-import OfflinePage from "../pages/OfflinePage.vue";
-import SettingsPage from "../pages/SettingsPage.vue";
-import LogsPage from "../pages/LogsPage.vue";
-
 const routes = [
   {
     path: "/",
-    component: MainLayout,
+    component: () => import("../layouts/MainLayout.vue"),
     children: [
-      { path: "", component: IndexPage },
-      { path: "offline", component: OfflinePage },
-      { path: "settings", component: SettingsPage },
-      { path: "logs", component: LogsPage },
+      { path: "", component: () => import("../pages/IndexPage.vue") },
+      { path: "offline", component: () => import("../pages/OfflinePage.vue") },
+      { path: "settings", component: () => import("../pages/SettingsPage.vue") },
+      { path: "logs", component: () => import("../pages/LogsPage.vue") },
     ],
   },
 ];

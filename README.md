@@ -117,6 +117,32 @@ npm run dev
 npm run build
 ```
 
+推荐开发调试（前后端分离，支持热更新）：
+
+```bash
+# 终端1：Python 后端（API + WS，代码变更自动重载，不托管静态前端）
+pytimetag gui --host 127.0.0.1 --port 8787 --reload --no-web
+
+# 终端2：Node 前端（Vite/Quasar HMR）
+cd webui
+npm run dev
+```
+
+调试时访问 `http://127.0.0.1:5173`。前端 devServer 已配置将 `/api` 与 `/ws` 代理到 `127.0.0.1:8787`。
+
+也可以在仓库根目录一键启动：
+
+```bash
+make dev
+```
+
+可单独启动：
+
+```bash
+make dev-backend
+make dev-frontend
+```
+
 `npm run build` 产物将输出到 `pytimetag/gui/webui_dist/`，并可随 `pip` 安装包一起发布。
 
 关键接口：

@@ -6,6 +6,7 @@
           <q-card-section class="row items-center">
             <div class="text-h6 col">DataBlocks</div>
             <q-btn flat color="primary" label="Refresh" @click="store.fetchDatablocks" />
+            <q-btn flat color="secondary" label="Load More" class="q-ml-sm" @click="store.loadMoreDatablocks" />
           </q-card-section>
           <q-separator />
           <q-card-section>
@@ -25,6 +26,7 @@
           <q-card-section class="row items-center">
             <div class="text-h6 col">Jobs</div>
             <q-btn flat color="primary" label="Refresh" @click="store.fetchJobs" />
+            <q-btn flat color="secondary" label="Load More" class="q-ml-sm" @click="store.loadMoreJobs" />
           </q-card-section>
           <q-separator />
           <q-card-section>

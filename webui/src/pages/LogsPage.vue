@@ -4,6 +4,7 @@
       <q-card-section class="row items-center">
         <div class="text-h6 col">Logs</div>
         <q-btn flat color="primary" label="Refresh" @click="store.fetchLogs" />
+        <q-btn flat color="secondary" label="Load More" class="q-ml-sm" @click="store.loadMoreLogs" />
       </q-card-section>
       <q-separator />
       <q-card-section>
@@ -28,7 +29,7 @@ let wsLogs = null;
 
 function formatTs(ts) {
   if (!ts) return "-";
-  return new Date(ts * 1000).toLocaleTimeString();
+  return new Date(ts * 1000).toLocaleTimeString([], { hour12: false });
 }
 
 onMounted(async () => {

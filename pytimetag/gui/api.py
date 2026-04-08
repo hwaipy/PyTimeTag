@@ -285,7 +285,7 @@ def create_app(config: GuiConfig) -> FastAPI:
         return {"items": rows[-int(limit):]}
 
     web_dist = Path(__file__).resolve().parent / "webui_dist"
-    if web_dist.exists():
+    if config.serve_web and web_dist.exists():
         app.mount("/assets", StaticFiles(directory=str(web_dist / "assets")), name="assets")
 
         @app.get("/")

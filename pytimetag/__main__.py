@@ -172,8 +172,23 @@ def main() -> None:
         gui_parser = argparse.ArgumentParser(description="Start PyTimeTag Web GUI server.")
         gui_parser.add_argument("--host", default="127.0.0.1", help="Host for GUI server (default: %(default)s)")
         gui_parser.add_argument("--port", type=int, default=8787, help="Port for GUI server (default: %(default)s)")
+        gui_parser.add_argument(
+            "--reload",
+            action="store_true",
+            help="Enable backend auto-reload for development.",
+        )
+        gui_parser.add_argument(
+            "--no-web",
+            action="store_true",
+            help="Disable serving bundled frontend; use Node dev server instead.",
+        )
         gui_args = gui_parser.parse_args(sys.argv[2:])
-        run_gui_server(host=gui_args.host, port=gui_args.port)
+        run_gui_server(
+            host=gui_args.host,
+            port=gui_args.port,
+            reload=gui_args.reload,
+            serve_web=not gui_args.no_web,
+        )
         return
 
     source_choices = ["simulator"] + list_cli_hardware_sources()

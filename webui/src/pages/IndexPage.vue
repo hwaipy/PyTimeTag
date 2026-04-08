@@ -92,6 +92,12 @@ const rateChartEl = ref(null);
 let rateChart = null;
 const rateHistory = [];
 const rateHistoryMax = 60;
+const rateTimeFormatter = new Intl.DateTimeFormat([], {
+  hourCycle: "h23",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
 
 async function enableHistogramDefault() {
   await store.updateAnalyzer("HistogramAnalyser", true, {
@@ -138,7 +144,7 @@ watch(
   () => store.metrics,
   (m) => {
     if (!m || !rateChart) return;
-    const t = new Date().toLocaleTimeString();
+    const t = rateTimeFormatter.format(new Date());
     rateHistory.push({ t, v: Number(m.events_rate_per_s || 0) });
     if (rateHistory.length > rateHistoryMax) rateHistory.shift();
     rateChart.setOption({

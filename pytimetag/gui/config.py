@@ -13,6 +13,7 @@ class GuiConfig:
     datablock_dir: str = "./store_test"
     celery_broker_url: str = "redis://127.0.0.1:6379/0"
     celery_result_backend: str = "redis://127.0.0.1:6379/1"
+    serve_web: bool = True
 
     @classmethod
     def from_env(cls) -> "GuiConfig":
@@ -23,6 +24,7 @@ class GuiConfig:
             datablock_dir=os.getenv("PYTIMETAG_DATABLOCK_DIR", "./store_test"),
             celery_broker_url=os.getenv("PYTIMETAG_CELERY_BROKER_URL", "redis://127.0.0.1:6379/0"),
             celery_result_backend=os.getenv("PYTIMETAG_CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/1"),
+            serve_web=os.getenv("PYTIMETAG_GUI_SERVE_WEB", "1").strip().lower() not in ("0", "false", "no"),
         )
 
     @property
