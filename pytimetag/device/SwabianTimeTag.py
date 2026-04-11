@@ -117,9 +117,11 @@ def detect_swabian_timetagger_version() -> Tuple[Optional[str], str]:
     except (OSError, subprocess.TimeoutExpired, ValueError):
         pass
 
-    # 2) locate TimeTagger.py and read __version__ / VERSION (no import of extension)
+    # 2) locate TimeTagger module source and read __version__ / VERSION (no import of extension)
     try:
         spec = importlib.util.find_spec("TimeTagger")
+        if spec is None:
+            spec = importlib.util.find_spec("Swabian.TimeTagger")
         origin = getattr(spec, "origin", None) if spec else None
         if origin and str(origin).endswith(".py"):
             text = Path(origin).read_text(encoding="utf-8", errors="replace")
@@ -169,7 +171,10 @@ def _load_timetagger():
         message=r".*Some module may need to rebuild instead.*",
     )
     try:
-        import TimeTagger  # type: ignore
+        try:
+            import TimeTagger  # type: ignore
+        except ModuleNotFoundError:
+            from Swabian import TimeTagger  # type: ignore
     except Exception as e:
         msg = str(e)
         if _looks_like_numpy_abi_failure(msg):
