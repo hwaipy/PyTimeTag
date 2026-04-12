@@ -1,59 +1,202 @@
 <template>
-  <q-layout view="lHh Lpr lFf">
-    <q-header elevated>
-      <q-linear-progress
-        v-show="store.isLoading || store.loadingProgress > 0"
-        :value="store.loadingProgress"
-        color="accent"
-        track-color="transparent"
-        class="absolute-top"
-      />
-      <q-toolbar>
-        <q-btn flat dense round icon="menu" @click="leftDrawerOpen = !leftDrawerOpen" />
-        <q-toolbar-title>PyTimeTag GUI</q-toolbar-title>
-        <q-chip dense square color="primary" text-color="white" class="q-ml-sm">
-          Device: {{ currentDevice }}
-        </q-chip>
-        <q-badge :color="running ? 'positive' : 'grey'" class="q-ml-sm">
-          {{ running ? "RUNNING" : "IDLE" }}
-        </q-badge>
-      </q-toolbar>
-    </q-header>
+  <div class="app-container">
+    <!-- Navigation Bar -->
+    <nav class="apple-nav">
+      <div class="nav-brand">PyTimeTag</div>
 
-    <q-drawer v-model="leftDrawerOpen" show-if-above bordered>
-      <q-list>
-        <q-item-label header>Navigation</q-item-label>
-        <q-item clickable v-ripple to="/" exact>
-          <q-item-section>Dashboard</q-item-section>
-        </q-item>
-        <q-item clickable v-ripple to="/offline">
-          <q-item-section>Offline</q-item-section>
-        </q-item>
-        <q-item clickable v-ripple to="/storage">
-          <q-item-section>Storage</q-item-section>
-        </q-item>
-        <q-item clickable v-ripple to="/settings">
-          <q-item-section>Settings</q-item-section>
-        </q-item>
-        <q-item clickable v-ripple to="/logs">
-          <q-item-section>Logs</q-item-section>
-        </q-item>
-      </q-list>
-    </q-drawer>
+      <div class="nav-links">
+        <router-link
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-link"
+          :class="{ active: $route.path === item.path }"
+        >
+          {{ item.label }}
+        </router-link>
+      </div>
 
-    <q-page-container>
-      <router-view />
-    </q-page-container>
-  </q-layout>
+      <div class="nav-right">
+        <!-- Reserved for future use -->
+      </div>
+
+      <!-- Route Loading Progress Bar -->
+      <div class="route-progress" v-show="isRouteLoading">
+        <div class="route-progress-bar" :style="{ width: progressPercent }"></div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="content-wrapper">
+        <router-view />
+      </div>
+    </main>
+  </div>
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
-import { useRuntimeStore } from "../stores/runtime";
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+import { routeLoadingProgress, isRouteLoading } from "../router/index.js";
 
-const leftDrawerOpen = ref(true);
-const store = useRuntimeStore();
-const running = computed(() => Boolean(store.metrics?.running || store.session?.running));
-const currentDevice = computed(() => store.metrics?.source || store.session?.source || "simulator");
+const route = useRoute();
+
+const navItems = [
+  { path: "/", label: "Dashboard" },
+  { path: "/offline", label: "Offline" },
+  { path: "/storage", label: "Storage" },
+  { path: "/settings", label: "Settings" },
+  { path: "/logs", label: "Logs" },
+];
+
+const progressPercent = computed(() => {
+  return Math.min(routeLoadingProgress.value, 100) + "%";
+});
 </script>
 
+<style scoped>
+@import "../css/apple-design.css";
+
+.app-container {
+  min-height: 100vh;
+  background-color: var(--apple-light-gray);
+}
+
+/* Navigation Bar - Centered Links */
+.apple-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  /* 确保子元素的 absolute 定位相对于导航栏 */
+  transform: translateZ(0);
+}
+
+.nav-brand {
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: -0.3px;
+  min-width: 100px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.nav-link {
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 400;
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.nav-link:hover {
+  color: white;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-link.active {
+  color: white;
+  background-color: rgba(255, 255, 255, 0.15);
+  font-weight: 500;
+}
+
+.nav-right {
+  min-width: 100px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Route Loading Progress Bar */
+.route-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.route-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #0071e3 0%, #2997ff 100%);
+  box-shadow: 0 0 10px rgba(0, 113, 227, 0.5), 0 0 20px rgba(0, 113, 227, 0.3);
+  transition: width 0.15s ease-out;
+}
+
+/* Main Content - No Sidebar */
+.main-content {
+  padding-top: 48px;
+  min-height: 100vh;
+}
+
+.content-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .apple-nav {
+    padding: 0 16px;
+  }
+
+  .nav-brand {
+    font-size: 16px;
+    min-width: auto;
+  }
+
+  .nav-links {
+    position: static;
+    transform: none;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .nav-link {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .nav-right {
+    display: none;
+  }
+
+  .content-wrapper {
+    padding: 20px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav-links {
+    gap: 2px;
+  }
+
+  .nav-link {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+}
+</style>

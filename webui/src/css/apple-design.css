@@ -1,0 +1,782 @@
+/* Apple Design System for PyTimeTag GUI */
+
+/* ========================================
+   1. CSS Variables
+   ======================================== */
+:root {
+  /* Primary Colors */
+  --apple-pure-black: #000000;
+  --apple-light-gray: #f5f5f7;
+  --apple-near-black: #1d1d1f;
+
+  /* Interactive Colors */
+  --apple-blue: #0071e3;
+  --apple-link-blue: #0066cc;
+  --apple-bright-blue: #2997ff;
+
+  /* Text Colors */
+  --apple-text-white: #ffffff;
+  --apple-text-primary: #1d1d1f;
+  --apple-text-secondary: rgba(0, 0, 0, 0.8);
+  --apple-text-tertiary: rgba(0, 0, 0, 0.48);
+  --apple-text-white-secondary: rgba(255, 255, 255, 0.8);
+
+  /* Dark Surface Colors */
+  --apple-dark-surface-1: #272729;
+  --apple-dark-surface-2: #262628;
+  --apple-dark-surface-3: #28282a;
+  --apple-dark-surface-4: #2a2a2d;
+  --apple-dark-surface-5: #242426;
+
+  /* Button States */
+  --apple-button-active: #ededf2;
+  --apple-button-light: #fafafc;
+  --apple-overlay: rgba(210, 210, 215, 0.64);
+
+  /* Shadows */
+  --apple-card-shadow: rgba(0, 0, 0, 0.22) 3px 5px 30px 0px;
+
+  /* Spacing */
+  --apple-spacing-xs: 4px;
+  --apple-spacing-sm: 8px;
+  --apple-spacing-md: 16px;
+  --apple-spacing-lg: 24px;
+  --apple-spacing-xl: 48px;
+
+  /* Border Radius */
+  --apple-radius-sm: 5px;
+  --apple-radius-md: 8px;
+  --apple-radius-lg: 11px;
+  --apple-radius-xl: 12px;
+  --apple-radius-pill: 980px;
+
+  /* Typography */
+  --apple-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --apple-font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ========================================
+   2. Base Styles
+   ======================================== */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--apple-font-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+  background-color: var(--apple-light-gray);
+  color: var(--apple-text-primary);
+}
+
+/* ========================================
+   3. Typography
+   ======================================== */
+.apple-display-hero {
+  font-family: var(--apple-font-display);
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 1.07;
+  letter-spacing: -0.28px;
+}
+
+.apple-section-heading {
+  font-family: var(--apple-font-display);
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.10;
+  letter-spacing: normal;
+}
+
+.apple-tile-heading {
+  font-family: var(--apple-font-display);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.14;
+  letter-spacing: 0.196px;
+}
+
+.apple-card-title {
+  font-family: var(--apple-font-display);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.19;
+  letter-spacing: 0.231px;
+}
+
+.apple-sub-heading {
+  font-family: var(--apple-font-display);
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.19;
+  letter-spacing: 0.231px;
+}
+
+.apple-body {
+  font-family: var(--apple-font-text);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.47;
+  letter-spacing: -0.374px;
+}
+
+.apple-body-emphasis {
+  font-family: var(--apple-font-text);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: -0.374px;
+}
+
+.apple-caption {
+  font-family: var(--apple-font-text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.29;
+  letter-spacing: -0.224px;
+}
+
+.apple-caption-bold {
+  font-family: var(--apple-font-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.29;
+  letter-spacing: -0.224px;
+}
+
+.apple-micro {
+  font-family: var(--apple-font-text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.33;
+  letter-spacing: -0.12px;
+}
+
+.apple-nav-text {
+  font-family: var(--apple-font-text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: normal;
+}
+
+/* ========================================
+   4. Dark Theme
+   ======================================== */
+.apple-dark {
+  background-color: var(--apple-pure-black);
+  color: var(--apple-text-white);
+}
+
+.apple-dark .apple-text-secondary {
+  color: var(--apple-text-white-secondary);
+}
+
+/* ========================================
+   5. Buttons
+   ======================================== */
+.apple-btn {
+  font-family: var(--apple-font-text);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1;
+  padding: 8px 16px;
+  border-radius: var(--apple-radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.apple-btn-primary {
+  background-color: var(--apple-blue);
+  color: var(--apple-text-white);
+}
+
+.apple-btn-primary:hover {
+  background-color: #0077ed;
+}
+
+.apple-btn-primary:active {
+  background-color: #0068d1;
+}
+
+.apple-btn-dark {
+  background-color: var(--apple-near-black);
+  color: var(--apple-text-white);
+}
+
+.apple-btn-dark:hover {
+  background-color: #2d2d2f;
+}
+
+.apple-btn-outline {
+  background-color: transparent;
+  color: var(--apple-blue);
+  border: 1px solid var(--apple-blue);
+}
+
+.apple-btn-outline:hover {
+  background-color: rgba(0, 113, 227, 0.05);
+}
+
+.apple-btn-pill {
+  border-radius: var(--apple-radius-pill);
+  padding: 8px 20px;
+}
+
+.apple-btn-light {
+  background-color: var(--apple-button-light);
+  color: var(--apple-text-secondary);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.apple-btn-light:hover {
+  background-color: var(--apple-button-active);
+}
+
+.apple-btn-danger {
+  background-color: #dc4446;
+  color: var(--apple-text-white);
+}
+
+.apple-btn-danger:hover {
+  background-color: #e04a4c;
+}
+
+/* ========================================
+   6. Cards
+   ======================================== */
+.apple-card {
+  background-color: var(--apple-light-gray);
+  border-radius: var(--apple-radius-xl);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.apple-card-dark {
+  background-color: var(--apple-dark-surface-1);
+}
+
+.apple-card-elevated {
+  box-shadow: var(--apple-card-shadow);
+}
+
+.apple-card-header {
+  padding: var(--apple-spacing-md) var(--apple-spacing-lg);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.apple-card-dark .apple-card-header {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.apple-card-body {
+  padding: var(--apple-spacing-lg);
+}
+
+.apple-card-footer {
+  padding: var(--apple-spacing-md) var(--apple-spacing-lg);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* ========================================
+   7. Navigation
+   ======================================== */
+.apple-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--apple-spacing-lg);
+}
+
+.apple-nav-link {
+  color: var(--apple-text-white);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 400;
+  padding: 8px 12px;
+  transition: opacity 0.2s ease;
+  opacity: 0.8;
+}
+
+.apple-nav-link:hover {
+  opacity: 1;
+}
+
+.apple-nav-link.active {
+  opacity: 1;
+  font-weight: 500;
+}
+
+/* ========================================
+   8. Links
+   ======================================== */
+.apple-link {
+  color: var(--apple-link-blue);
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.apple-link:hover {
+  text-decoration: underline;
+}
+
+.apple-dark .apple-link {
+  color: var(--apple-bright-blue);
+}
+
+/* ========================================
+   9. Status Indicators
+   ======================================== */
+.apple-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--apple-radius-pill);
+}
+
+.apple-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.apple-status-running {
+  background-color: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.apple-status-running .apple-status-dot {
+  background-color: #4caf50;
+  animation: apple-pulse 2s ease-in-out infinite;
+}
+
+.apple-status-idle {
+  background-color: rgba(0, 0, 0, 0.08);
+  color: var(--apple-text-tertiary);
+}
+
+.apple-status-idle .apple-status-dot {
+  background-color: var(--apple-text-tertiary);
+}
+
+@keyframes apple-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ========================================
+   10. Progress Bar
+   ======================================== */
+.apple-progress {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: transparent;
+  z-index: 1001;
+}
+
+.apple-progress-bar {
+  height: 100%;
+  background-color: var(--apple-blue);
+  transition: width 0.3s ease;
+}
+
+/* ========================================
+   11. Sidebar
+   ======================================== */
+.apple-sidebar {
+  position: fixed;
+  left: 0;
+  top: 48px;
+  bottom: 0;
+  width: 260px;
+  background-color: rgba(0, 0, 0, 0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  padding: var(--apple-spacing-md) 0;
+  z-index: 999;
+}
+
+.apple-sidebar-item {
+  display: flex;
+  align-items: center;
+  padding: 12px var(--apple-spacing-lg);
+  color: var(--apple-text-white);
+  text-decoration: none;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+  border-left: 3px solid transparent;
+}
+
+.apple-sidebar-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.apple-sidebar-item.active {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-left-color: var(--apple-blue);
+}
+
+.apple-sidebar-icon {
+  width: 20px;
+  margin-right: 12px;
+  opacity: 0.7;
+}
+
+.apple-sidebar-item.active .apple-sidebar-icon {
+  opacity: 1;
+}
+
+/* ========================================
+   12. Layout
+   ======================================== */
+.apple-layout {
+  padding-top: 48px;
+  padding-left: 260px;
+  min-height: 100vh;
+}
+
+.apple-main {
+  padding: var(--apple-spacing-xl);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.apple-section {
+  margin-bottom: var(--apple-spacing-xl);
+}
+
+.apple-section-dark {
+  background-color: var(--apple-pure-black);
+  color: var(--apple-text-white);
+  margin: calc(-1 * var(--apple-spacing-xl));
+  margin-bottom: var(--apple-spacing-xl);
+  padding: var(--apple-spacing-xl);
+}
+
+/* Grid System */
+.apple-grid {
+  display: grid;
+  gap: var(--apple-spacing-lg);
+}
+
+.apple-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.apple-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.apple-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1024px) {
+  .apple-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .apple-layout {
+    padding-left: 0;
+  }
+
+  .apple-sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .apple-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .apple-grid-2,
+  .apple-grid-3,
+  .apple-grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .apple-display-hero {
+    font-size: 40px;
+  }
+
+  .apple-section-heading {
+    font-size: 32px;
+  }
+}
+
+/* ========================================
+   13. Form Elements
+   ======================================== */
+.apple-input {
+  font-family: var(--apple-font-text);
+  font-size: 17px;
+  padding: 8px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--apple-radius-lg);
+  background-color: var(--apple-button-light);
+  color: var(--apple-text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.apple-input:focus {
+  border-color: var(--apple-blue);
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.2);
+}
+
+.apple-input::placeholder {
+  color: var(--apple-text-tertiary);
+}
+
+/* ========================================
+   14. Table
+   ======================================== */
+.apple-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+}
+
+.apple-table th {
+  text-align: left;
+  padding: 12px var(--apple-spacing-md);
+  font-weight: 600;
+  color: var(--apple-text-secondary);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.apple-table td {
+  padding: 14px var(--apple-spacing-md);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.apple-table tr:hover td {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* ========================================
+   15. Modal/Dialog
+   ======================================== */
+.apple-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.apple-modal {
+  background-color: var(--apple-light-gray);
+  border-radius: var(--apple-radius-xl);
+  box-shadow: var(--apple-card-shadow);
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.apple-modal-header {
+  padding: var(--apple-spacing-md) var(--apple-spacing-lg);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.apple-modal-body {
+  padding: var(--apple-spacing-lg);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.apple-modal-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.apple-modal-close:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
+   16. List
+   ======================================== */
+.apple-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.apple-list-item {
+  padding: 12px var(--apple-spacing-md);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.apple-list-item:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.apple-list-item.active {
+  background-color: var(--apple-blue);
+  color: var(--apple-text-white);
+}
+
+/* ========================================
+   17. Empty State
+   ======================================== */
+.apple-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--apple-spacing-xl) var(--apple-spacing-lg);
+  text-align: center;
+  color: var(--apple-text-tertiary);
+}
+
+.apple-empty-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: var(--apple-spacing-md);
+  opacity: 0.3;
+}
+
+/* ========================================
+   18. Code/Preformatted
+   ======================================== */
+.apple-code {
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  font-size: 13px;
+  background-color: var(--apple-dark-surface-5);
+  color: var(--apple-text-white);
+  padding: var(--apple-spacing-lg);
+  border-radius: var(--apple-radius-md);
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+/* ========================================
+   19. Notification
+   ======================================== */
+.apple-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background-color: var(--apple-dark-surface-1);
+  color: var(--apple-text-white);
+  padding: var(--apple-spacing-md) var(--apple-spacing-lg);
+  border-radius: var(--apple-radius-lg);
+  box-shadow: var(--apple-card-shadow);
+  display: flex;
+  align-items: center;
+  gap: var(--apple-spacing-sm);
+  animation: apple-slide-in 0.3s ease;
+  z-index: 3000;
+}
+
+@keyframes apple-slide-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.apple-toast-success {
+  border-left: 3px solid #4caf50;
+}
+
+.apple-toast-error {
+  border-left: 3px solid #f44336;
+}
+
+/* ========================================
+   20. Chart Container
+   ======================================== */
+.apple-chart {
+  background-color: var(--apple-dark-surface-1);
+  border-radius: var(--apple-radius-xl);
+  padding: var(--apple-spacing-lg);
+  height: 300px;
+}
+
+.apple-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--apple-spacing-md);
+}
+
+.apple-chart-title {
+  font-family: var(--apple-font-display);
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.apple-chart-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4caf50;
+}
+
+.apple-chart-live-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #4caf50;
+  border-radius: 50%;
+  animation: apple-pulse 2s ease-in-out infinite;
+}
