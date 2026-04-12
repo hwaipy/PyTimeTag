@@ -38,6 +38,15 @@ class ConfigureAnalyserRequest(BaseModel):
     config: Optional[Dict[str, Any]] = None
 
 
+class StorageQueryRequest(BaseModel):
+    limit: int = 100
+    offset: int = 0
+    order_by: str = "FetchTime"
+    order_desc: bool = True
+    after: Optional[str] = None
+    filter: Optional[Dict[str, Any]] = None
+
+
 class WsHub:
     def __init__(self) -> None:
         self._clients: List[WebSocket] = []
@@ -296,6 +305,77 @@ def create_app(config: GuiConfig) -> FastAPI:
         async def web_fallback(full_path: str) -> FileResponse:
             _ = full_path
             return FileResponse(web_dist / "index.html")
+
+    @app.get("/api/v1/storage/collections")
+    async def list_storage_collections() -> Dict[str, Any]:
+        rows = conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name LIKE 'Storage_%'"
+        ).fetchall()
+        collections = [r[0][8:] for r in rows]
+        return {"items": collections}
+
+    @app.get("/api/v1/storage/{collection}")
+    async def query_storage_collection(
+        collection: str,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "FetchTime",
+        order_desc: bool = True,
+        after: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        from pytimetag.storage import Storage
+
+        storage = Storage(conn, timezone="utc")
+        try:
+            await storage._Storage__senseExistCollections()
+            if collection not in storage.existCollections:
+                raise HTTPException(status_code=404, detail=f"Collection '{collection}' not found")
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        try:
+            items = await storage.latest(
+                collection,
+                by=order_by,
+                after=after,
+                length=limit + offset,
+            )
+            if items is None:
+                items = []
+            elif not isinstance(items, list):
+                items = [items]
+            items = items[offset:]
+            return {"items": items, "collection": collection, "limit": limit, "offset": offset}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/api/v1/storage/{collection}/{item_id}")
+    async def get_storage_item(collection: str, item_id: str) -> Dict[str, Any]:
+        from pytimetag.storage import Storage
+
+        storage = Storage(conn, timezone="utc")
+        try:
+            doc = await storage.get(collection, item_id, key="_id")
+            if doc is None:
+                raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found in collection '{collection}'")
+            return doc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.delete("/api/v1/storage/{collection}/{item_id}")
+    async def delete_storage_item(collection: str, item_id: str) -> Dict[str, Any]:
+        # Use acquisition service's storage connection
+        storage = acquisition._storage
+        try:
+            await storage.delete(collection, item_id, key="_id")
+            await hub_logs.broadcast_json(
+                {"type": "log", "level": "info", "message": f"Deleted {collection}/{item_id}"}
+            )
+            return {"deleted": True, "collection": collection, "id": item_id}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.get("/healthz")
     async def healthz() -> Dict[str, str]:

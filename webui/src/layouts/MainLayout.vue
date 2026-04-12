@@ -29,6 +29,9 @@
         <q-item clickable v-ripple to="/offline">
           <q-item-section>Offline</q-item-section>
         </q-item>
+        <q-item clickable v-ripple to="/storage">
+          <q-item-section>Storage</q-item-section>
+        </q-item>
         <q-item clickable v-ripple to="/settings">
           <q-item-section>Settings</q-item-section>
         </q-item>

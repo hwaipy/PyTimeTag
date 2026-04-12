@@ -157,3 +157,5 @@ webui/.q-cache/
 webui_dist/
 
 store_test
+
+.claude

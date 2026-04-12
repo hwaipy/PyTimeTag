@@ -143,6 +143,31 @@ export const useRuntimeStore = defineStore("runtime", {
       };
       return ws;
     },
+    // Storage API methods
+    async fetchStorageCollections() {
+      const res = await this._request(`${API_BASE}/storage/collections`);
+      const data = await res.json();
+      return data.items || [];
+    },
+    async fetchStorageCollection(collection, params = {}) {
+      const query = new URLSearchParams();
+      if (params.limit) query.set("limit", params.limit);
+      if (params.offset) query.set("offset", params.offset);
+      if (params.order_by) query.set("order_by", params.order_by);
+      if (params.order_desc !== undefined) query.set("order_desc", params.order_desc);
+      if (params.after) query.set("after", params.after);
+      const res = await this._request(`${API_BASE}/storage/${collection}?${query.toString()}`);
+      return await res.json();
+    },
+    async fetchStorageItem(collection, itemId) {
+      const res = await this._request(`${API_BASE}/storage/${collection}/${itemId}`);
+      return await res.json();
+    },
+    async deleteStorageItem(collection, itemId) {
+      await this._request(`${API_BASE}/storage/${collection}/${itemId}`, {
+        method: "DELETE",
+      });
+    },
   },
 });
 
