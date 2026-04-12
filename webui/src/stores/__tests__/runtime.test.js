@@ -107,7 +107,7 @@ describe('Runtime Store', () => {
     })
   })
 
-  describe('Storage API', () => {
+  describe('Storage API - Unified Style', () => {
     it('should fetch storage collections', async () => {
       const mockResponse = { items: ['CounterAnalyser', 'HistogramAnalyser'] }
       fetch.mockResolvedValueOnce({
@@ -122,11 +122,26 @@ describe('Runtime Store', () => {
       expect(result).toEqual(['CounterAnalyser', 'HistogramAnalyser'])
     })
 
-    it('should fetch storage collection data', async () => {
+    it('should append data to collection', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ appended: true, collection: 'CounterAnalyser' }),
+      })
+
+      const store = useRuntimeStore()
+      const result = await store.storageAppend('CounterAnalyser', { count: 100 })
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/storage/CounterAnalyser/append', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { count: 100 }, fetchTime: undefined }),
+      })
+      expect(result.appended).toBe(true)
+    })
+
+    it('should list collection data', async () => {
       const mockResponse = {
-        items: [
-          { _id: '1', Data: { count: 100 }, RecordTime: '2026-01-01T00:00:00Z' },
-        ],
+        items: [{ _id: '1', Data: { count: 100 } }],
         collection: 'CounterAnalyser',
         limit: 10,
         offset: 0,
@@ -137,45 +152,122 @@ describe('Runtime Store', () => {
       })
 
       const store = useRuntimeStore()
-      const result = await store.fetchStorageCollection('CounterAnalyser', { limit: 10 })
+      const result = await store.storageList('CounterAnalyser', { limit: 10, by: 'FetchTime' })
 
       expect(fetch).toHaveBeenCalledWith(
-        '/api/v1/storage/CounterAnalyser?limit=10',
+        '/api/v1/storage/CounterAnalyser/list?limit=10&by=FetchTime',
         undefined
       )
       expect(result).toEqual(mockResponse)
     })
 
-    it('should fetch single storage item', async () => {
-      const mockResponse = { _id: 'test-id', Data: { count: 100 } }
+    it('should get first item', async () => {
       fetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockResponse,
+        json: async () => ({ _id: 'first', Data: { count: 100 } }),
       })
 
       const store = useRuntimeStore()
-      const result = await store.fetchStorageItem('CounterAnalyser', 'test-id')
+      const result = await store.storageFirst('CounterAnalyser', { by: 'FetchTime' })
 
       expect(fetch).toHaveBeenCalledWith(
-        '/api/v1/storage/CounterAnalyser/test-id',
+        '/api/v1/storage/CounterAnalyser/first?by=FetchTime',
         undefined
       )
-      expect(result).toEqual(mockResponse)
+      expect(result._id).toBe('first')
     })
 
-    it('should delete storage item', async () => {
+    it('should get range of items', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [{ _id: '1' }, { _id: '2' }] }),
+      })
+
+      const store = useRuntimeStore()
+      const result = await store.storageRange('CounterAnalyser', '2026-01-01', '2026-01-02', { limit: 100 })
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/storage/CounterAnalyser/range?begin=2026-01-01&end=2026-01-02&limit=100',
+        undefined
+      )
+    })
+
+    it('should get item by id', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ _id: 'test-id', Data: { count: 100 } }),
+      })
+
+      const store = useRuntimeStore()
+      const result = await store.storageGet('CounterAnalyser', 'test-id')
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/storage/CounterAnalyser/get/test-id?',
+        undefined
+      )
+      expect(result._id).toBe('test-id')
+    })
+
+    it('should get item by custom key', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ FetchTime: '2026-01-01', Data: {} }),
+      })
+
+      const store = useRuntimeStore()
+      const result = await store.storageGet('CounterAnalyser', '2026-01-01', 'FetchTime')
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/storage/CounterAnalyser/get/2026-01-01?key=FetchTime',
+        undefined
+      )
+    })
+
+    it('should delete item by id', async () => {
       fetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ deleted: true }),
       })
 
       const store = useRuntimeStore()
-      await store.deleteStorageItem('CounterAnalyser', 'test-id')
+      await store.storageDelete('CounterAnalyser', 'test-id')
 
       expect(fetch).toHaveBeenCalledWith(
-        '/api/v1/storage/CounterAnalyser/test-id',
+        '/api/v1/storage/CounterAnalyser/delete/test-id?',
         { method: 'DELETE' }
       )
+    })
+
+    it('should delete item by custom key', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ deleted: true }),
+      })
+
+      const store = useRuntimeStore()
+      await store.storageDelete('CounterAnalyser', '2026-01-01', 'FetchTime')
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/storage/CounterAnalyser/delete/2026-01-01?key=FetchTime',
+        { method: 'DELETE' }
+      )
+    })
+
+    it('should update item', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ updated: true }),
+      })
+
+      const store = useRuntimeStore()
+      const result = await store.storageUpdate('CounterAnalyser', 'test-id', { Data: { count: 200 } })
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/storage/CounterAnalyser/update/test-id', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: { Data: { count: 200 } } }),
+      })
+      expect(result.updated).toBe(true)
     })
   })
 

@@ -306,40 +306,36 @@ def create_app(config: GuiConfig) -> FastAPI:
             _ = full_path
             return FileResponse(web_dist / "index.html")
 
+    # Storage API - unified style: /storage/{collection}/{function}/{arg}
     @app.get("/api/v1/storage/collections")
-    async def list_storage_collections() -> Dict[str, Any]:
-        rows = conn.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name LIKE 'Storage_%'"
-        ).fetchall()
-        collections = [r[0][8:] for r in rows]
-        return {"items": collections}
+    async def storage_list_collections() -> Dict[str, Any]:
+        storage = acquisition._storage
+        if storage.existCollections is None:
+            await storage._Storage__senseExistCollections()
+        return {"items": list(storage.existCollections) if storage.existCollections else []}
 
-    @app.get("/api/v1/storage/{collection}")
-    async def query_storage_collection(
+    @app.post("/api/v1/storage/{collection}/append")
+    async def storage_append(collection: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        storage = acquisition._storage
+        data = body.get("data", {})
+        fetch_time = body.get("fetchTime")
+        try:
+            await storage.append(collection, data, fetch_time)
+            return {"appended": True, "collection": collection}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/api/v1/storage/{collection}/list")
+    async def storage_list(
         collection: str,
         limit: int = 100,
         offset: int = 0,
-        order_by: str = "FetchTime",
-        order_desc: bool = True,
+        by: str = "FetchTime",
         after: Optional[str] = None,
     ) -> Dict[str, Any]:
-        from pytimetag.storage import Storage
-
-        storage = Storage(conn, timezone="utc")
+        storage = acquisition._storage
         try:
-            await storage._Storage__senseExistCollections()
-            if collection not in storage.existCollections:
-                raise HTTPException(status_code=404, detail=f"Collection '{collection}' not found")
-        except Exception as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-        try:
-            items = await storage.latest(
-                collection,
-                by=order_by,
-                after=after,
-                length=limit + offset,
-            )
+            items = await storage.latest(collection, by=by, after=after, length=limit + offset)
             if items is None:
                 items = []
             elif not isinstance(items, list):
@@ -349,31 +345,77 @@ def create_app(config: GuiConfig) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    @app.get("/api/v1/storage/{collection}/{item_id}")
-    async def get_storage_item(collection: str, item_id: str) -> Dict[str, Any]:
-        from pytimetag.storage import Storage
-
-        storage = Storage(conn, timezone="utc")
+    @app.get("/api/v1/storage/{collection}/first")
+    async def storage_first(
+        collection: str,
+        by: str = "FetchTime",
+        after: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        storage = acquisition._storage
         try:
-            doc = await storage.get(collection, item_id, key="_id")
+            result = await storage.first(collection, by=by, after=after, length=1)
+            if result is None:
+                raise HTTPException(status_code=404, detail="No items found")
+            return result
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/api/v1/storage/{collection}/range")
+    async def storage_range(
+        collection: str,
+        begin: str,
+        end: str,
+        by: str = "FetchTime",
+        limit: int = 1000,
+    ) -> Dict[str, Any]:
+        storage = acquisition._storage
+        try:
+            items = await storage.range(collection, begin=begin, end=end, by=by, limit=limit)
+            return {"items": items, "collection": collection, "limit": limit}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/api/v1/storage/{collection}/get/{value}")
+    async def storage_get(
+        collection: str,
+        value: str,
+        key: str = "_id",
+    ) -> Dict[str, Any]:
+        storage = acquisition._storage
+        try:
+            doc = await storage.get(collection, value, key=key)
             if doc is None:
-                raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found in collection '{collection}'")
+                raise HTTPException(status_code=404, detail=f"Item with {key}='{value}' not found")
             return doc
         except HTTPException:
             raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    @app.delete("/api/v1/storage/{collection}/{item_id}")
-    async def delete_storage_item(collection: str, item_id: str) -> Dict[str, Any]:
-        # Use acquisition service's storage connection
+    @app.delete("/api/v1/storage/{collection}/delete/{value}")
+    async def storage_delete(
+        collection: str,
+        value: str,
+        key: str = "_id",
+    ) -> Dict[str, Any]:
         storage = acquisition._storage
         try:
-            await storage.delete(collection, item_id, key="_id")
+            await storage.delete(collection, value, key=key)
             await hub_logs.broadcast_json(
-                {"type": "log", "level": "info", "message": f"Deleted {collection}/{item_id}"}
+                {"type": "log", "level": "info", "message": f"Deleted {collection}/{value}"}
             )
-            return {"deleted": True, "collection": collection, "id": item_id}
+            return {"deleted": True, "collection": collection, "key": key, "value": value}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.put("/api/v1/storage/{collection}/update/{id}")
+    async def storage_update(collection: str, id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        storage = acquisition._storage
+        try:
+            await storage.update(collection, id, body.get("value", {}))
+            return {"updated": True, "collection": collection, "id": id}
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 

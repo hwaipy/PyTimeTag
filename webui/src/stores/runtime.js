@@ -143,30 +143,65 @@ export const useRuntimeStore = defineStore("runtime", {
       };
       return ws;
     },
-    // Storage API methods
+    // Storage API methods - unified style: /storage/{collection}/{function}/{arg}
     async fetchStorageCollections() {
       const res = await this._request(`${API_BASE}/storage/collections`);
       const data = await res.json();
       return data.items || [];
     },
-    async fetchStorageCollection(collection, params = {}) {
+    async storageAppend(collection, data, fetchTime) {
+      const res = await this._request(`${API_BASE}/storage/${collection}/append`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data, fetchTime }),
+      });
+      return await res.json();
+    },
+    async storageList(collection, params = {}) {
       const query = new URLSearchParams();
       if (params.limit) query.set("limit", params.limit);
       if (params.offset) query.set("offset", params.offset);
-      if (params.order_by) query.set("order_by", params.order_by);
-      if (params.order_desc !== undefined) query.set("order_desc", params.order_desc);
+      if (params.by) query.set("by", params.by);
       if (params.after) query.set("after", params.after);
-      const res = await this._request(`${API_BASE}/storage/${collection}?${query.toString()}`);
+      const res = await this._request(`${API_BASE}/storage/${collection}/list?${query.toString()}`);
       return await res.json();
     },
-    async fetchStorageItem(collection, itemId) {
-      const res = await this._request(`${API_BASE}/storage/${collection}/${itemId}`);
+    async storageFirst(collection, params = {}) {
+      const query = new URLSearchParams();
+      if (params.by) query.set("by", params.by);
+      if (params.after) query.set("after", params.after);
+      const res = await this._request(`${API_BASE}/storage/${collection}/first?${query.toString()}`);
       return await res.json();
     },
-    async deleteStorageItem(collection, itemId) {
-      await this._request(`${API_BASE}/storage/${collection}/${itemId}`, {
+    async storageRange(collection, begin, end, params = {}) {
+      const query = new URLSearchParams();
+      query.set("begin", begin);
+      query.set("end", end);
+      if (params.by) query.set("by", params.by);
+      if (params.limit) query.set("limit", params.limit);
+      const res = await this._request(`${API_BASE}/storage/${collection}/range?${query.toString()}`);
+      return await res.json();
+    },
+    async storageGet(collection, value, key = "_id") {
+      const query = new URLSearchParams();
+      if (key !== "_id") query.set("key", key);
+      const res = await this._request(`${API_BASE}/storage/${collection}/get/${value}?${query.toString()}`);
+      return await res.json();
+    },
+    async storageDelete(collection, value, key = "_id") {
+      const query = new URLSearchParams();
+      if (key !== "_id") query.set("key", key);
+      await this._request(`${API_BASE}/storage/${collection}/delete/${value}?${query.toString()}`, {
         method: "DELETE",
       });
+    },
+    async storageUpdate(collection, id, value) {
+      const res = await this._request(`${API_BASE}/storage/${collection}/update/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value }),
+      });
+      return await res.json();
     },
   },
 });
