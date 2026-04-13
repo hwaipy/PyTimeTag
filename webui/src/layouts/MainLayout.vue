@@ -53,7 +53,8 @@ import { routeLoadingProgress, isRouteLoading } from "../router/index.js";
 const route = useRoute();
 
 const navItems = [
-  { path: "/", label: "Dashboard" },
+  { path: "/", label: "Devices" },
+  { path: "/dashboard", label: "Dashboard" },
   { path: "/offline", label: "Offline" },
   { path: "/storage", label: "Storage" },
   { path: "/settings", label: "Settings" },

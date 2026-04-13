@@ -418,4 +418,174 @@ describe('Runtime Store', () => {
       expect(store.isLoading).toBe(false)
     })
   })
+
+  describe('Device Instance Management APIs', () => {
+    it('should fetch devices', async () => {
+      const mockResponse = {
+        items: [
+          { device_type: 'simulator', serial_number: 'SIM-001', channel_count: 16 },
+        ],
+      }
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      })
+
+      const store = useRuntimeStore()
+      const result = await store.fetchDevices()
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/devices', undefined)
+      expect(store.devices).toEqual(mockResponse.items)
+      expect(result).toEqual(mockResponse.items)
+    })
+
+    it('should create a device', async () => {
+      const createResponse = {
+        device_type: 'simulator',
+        serial_number: 'SIM-002',
+        channel_count: 8,
+        unique_id: 'simulator:SIM-002',
+      }
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => createResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [createResponse] }),
+        })
+
+      const store = useRuntimeStore()
+      const result = await store.createDevice('simulator', 'SIM-002', 8)
+
+      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_type: 'simulator',
+          serial_number: 'SIM-002',
+          channel_count: 8,
+        }),
+      })
+      expect(result.unique_id).toBe('simulator:SIM-002')
+    })
+
+    it('should start a device', async () => {
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ started: true }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [] }),
+        })
+
+      const store = useRuntimeStore()
+      await store.startDevice('simulator', 'SIM-001')
+
+      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices/simulator/SIM-001/start', {
+        method: 'POST',
+      })
+    })
+
+    it('should stop a device', async () => {
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ stopped: true }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [] }),
+        })
+
+      const store = useRuntimeStore()
+      await store.stopDevice('simulator', 'SIM-001')
+
+      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices/simulator/SIM-001/stop', {
+        method: 'POST',
+      })
+    })
+
+    it('should delete a device', async () => {
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ removed: true }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [] }),
+        })
+
+      const store = useRuntimeStore()
+      await store.deleteDevice('simulator', 'SIM-001')
+
+      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices/simulator/SIM-001', {
+        method: 'DELETE',
+      })
+    })
+
+    it('should fetch device channels', async () => {
+      const mockResponse = {
+        device_type: 'simulator',
+        serial_number: 'SIM-001',
+        channels: [
+          {
+            channel_id: 0,
+            dead_time_s: 0.000001,
+            threshold_voltage: -0.5,
+            enabled: true,
+            mode: 'Period',
+          },
+        ],
+      }
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      })
+
+      const store = useRuntimeStore()
+      const result = await store.fetchDeviceChannels('simulator', 'SIM-001')
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/devices/simulator/SIM-001/channels',
+        undefined
+      )
+      expect(result.channels[0].channel_id).toBe(0)
+      expect(result.channels[0].dead_time_s).toBe(0.000001)
+    })
+
+    it('should update device channel', async () => {
+      const mockResponse = {
+        updated: true,
+        device_type: 'simulator',
+        serial_number: 'SIM-001',
+        channel_id: 0,
+        config: { dead_time_s: 0.000002, threshold_voltage: -0.3 },
+      }
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      })
+
+      const store = useRuntimeStore()
+      const result = await store.updateDeviceChannel('simulator', 'SIM-001', 0, {
+        dead_time_s: 0.000002,
+        threshold_voltage: -0.3,
+      })
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/devices/simulator/SIM-001/channels/0',
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dead_time_s: 0.000002, threshold_voltage: -0.3 }),
+        }
+      )
+      expect(result.updated).toBe(true)
+    })
+  })
 })

@@ -11,6 +11,8 @@ export const useRuntimeStore = defineStore("runtime", {
     analyzers: {},
     settings: {},
     logs: [],
+    devices: [],
+    currentDevice: null,
     datablocksLimit: 50,
     jobsLimit: 50,
     logsLimit: 50,
@@ -200,6 +202,57 @@ export const useRuntimeStore = defineStore("runtime", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ value }),
+      });
+      return await res.json();
+    },
+    // Device Instance Management APIs
+    async fetchDevices() {
+      const res = await this._request(`${API_BASE}/devices`);
+      const data = await res.json();
+      this.devices = data.items || [];
+      return this.devices;
+    },
+    async createDevice(deviceType, serialNumber, channelCount = 16) {
+      const res = await this._request(`${API_BASE}/devices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          device_type: deviceType,
+          serial_number: serialNumber,
+          channel_count: channelCount,
+        }),
+      });
+      const device = await res.json();
+      await this.fetchDevices();
+      return device;
+    },
+    async startDevice(deviceType, serialNumber) {
+      await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/start`, {
+        method: "POST",
+      });
+      await this.fetchDevices();
+    },
+    async stopDevice(deviceType, serialNumber) {
+      await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/stop`, {
+        method: "POST",
+      });
+      await this.fetchDevices();
+    },
+    async deleteDevice(deviceType, serialNumber) {
+      await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}`, {
+        method: "DELETE",
+      });
+      await this.fetchDevices();
+    },
+    async fetchDeviceChannels(deviceType, serialNumber) {
+      const res = await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/channels`);
+      return await res.json();
+    },
+    async updateDeviceChannel(deviceType, serialNumber, channelId, config) {
+      const res = await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/channels/${channelId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
       });
       return await res.json();
     },

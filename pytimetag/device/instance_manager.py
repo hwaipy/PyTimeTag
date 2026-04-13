@@ -1,0 +1,271 @@
+"""Device instance manager for multi-instance device management.
+
+Each instance is identified by a unique key: "{device_type}:{serial_number}"
+"""
+
+from __future__ import annotations
+
+import threading
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import numpy as np
+
+from pytimetag.device.base import DeviceInfo, TimeTagDevice
+from pytimetag.device.manager import device_type_manager
+from pytimetag.device.Simulator import TimeTagSimulator
+from pytimetag.device.SwabianSimulator import SwabianSimulator
+
+
+class DeviceInstance:
+    """Wrapper for a running device instance with its metadata."""
+
+    def __init__(
+        self,
+        device_type: str,
+        serial_number: str,
+        device: TimeTagDevice,
+        model_name: Optional[str] = None,
+    ):
+        self.device_type = device_type
+        self.serial_number = serial_number
+        self.device = device
+        self.model_name = model_name
+        self._created_at = threading.current_thread().ident
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self.device_type}:{self.serial_number}"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize instance metadata (not the device itself)."""
+        return {
+            "device_type": self.device_type,
+            "serial_number": self.serial_number,
+            "model_name": self.model_name,
+            "unique_id": self.unique_id,
+            "channel_count": self.device.channel_count,
+            "resolution": self.device.resolution,
+        }
+
+
+class DeviceInstanceManager:
+    """Manages multiple running device instances.
+
+    Each instance is keyed by "{device_type}:{serial_number}" to ensure uniqueness.
+    """
+
+    def __init__(self):
+        self._instances: Dict[str, DeviceInstance] = {}
+        self._lock = threading.RLock()
+
+    def list_instances(self) -> List[Dict[str, Any]]:
+        """List all running device instances."""
+        with self._lock:
+            return [instance.to_dict() for instance in self._instances.values()]
+
+    def get_instance(self, device_type: str, serial_number: str) -> Optional[DeviceInstance]:
+        """Get a device instance by type and serial number."""
+        key = f"{device_type}:{serial_number}"
+        with self._lock:
+            return self._instances.get(key)
+
+    def create_simulator(
+        self,
+        serial_number: str = "SIMULATOR",
+        channel_count: int = 16,
+        data_callback: Optional[Callable[[np.ndarray], None]] = None,
+    ) -> DeviceInstance:
+        """Create a standard 16-channel simulator instance.
+
+        Args:
+            serial_number: Unique serial for this simulator instance
+            channel_count: Number of channels (default 16)
+            data_callback: Optional callback for data updates
+        """
+        key = f"simulator:{serial_number}"
+
+        with self._lock:
+            if key in self._instances:
+                raise ValueError(f"Simulator instance '{serial_number}' already exists")
+
+            if data_callback is None:
+                data_callback = lambda x: None
+
+            device = TimeTagSimulator(
+                dataUpdate=data_callback,
+                channel_count=channel_count,
+                serial_number=serial_number,
+            )
+
+            instance = DeviceInstance(
+                device_type="simulator",
+                serial_number=serial_number,
+                device=device,
+                model_name="TimeTagSimulator",
+            )
+
+            self._instances[key] = instance
+            return instance
+
+    def create_swabian_simulator(
+        self,
+        serial_number: str = "SWABIAN-001",
+        data_callback: Optional[Callable[[np.ndarray], None]] = None,
+    ) -> DeviceInstance:
+        """Create a Swabian-style 8-channel simulator instance.
+
+        Args:
+            serial_number: Unique serial for this swabian simulator instance
+            data_callback: Optional callback for data updates
+        """
+        key = f"swabian_simulator:{serial_number}"
+
+        with self._lock:
+            if key in self._instances:
+                raise ValueError(f"Swabian simulator instance '{serial_number}' already exists")
+
+            if data_callback is None:
+                data_callback = lambda x: None
+
+            device = SwabianSimulator(
+                dataUpdate=data_callback,
+                serial_number=serial_number,
+            )
+
+            instance = DeviceInstance(
+                device_type="swabian_simulator",
+                serial_number=serial_number,
+                device=device,
+                model_name="SwabianSimulator",
+            )
+
+            self._instances[key] = instance
+            return instance
+
+    def start_instance(self, device_type: str, serial_number: str) -> None:
+        """Start a device instance."""
+        instance = self.get_instance(device_type, serial_number)
+        if instance is None:
+            raise ValueError(f"Device instance '{device_type}:{serial_number}' not found")
+        instance.device.start()
+
+    def stop_instance(self, device_type: str, serial_number: str) -> None:
+        """Stop a device instance."""
+        instance = self.get_instance(device_type, serial_number)
+        if instance is None:
+            raise ValueError(f"Device instance '{device_type}:{serial_number}' not found")
+        instance.device.stop()
+
+    def remove_instance(self, device_type: str, serial_number: str) -> None:
+        """Stop and remove a device instance."""
+        key = f"{device_type}:{serial_number}"
+        with self._lock:
+            instance = self._instances.get(key)
+            if instance is None:
+                raise ValueError(f"Device instance '{key}' not found")
+
+            instance.device.stop()
+            del self._instances[key]
+
+    def get_channel_info(
+        self, device_type: str, serial_number: str
+    ) -> List[Dict[str, Any]]:
+        """Get channel information for a device instance.
+
+        Returns list of channel info dicts with:
+        - channel_id: int
+        - dead_time_s: float
+        - threshold_voltage: float
+        - enabled: bool
+        - mode: str (for simulator)
+        """
+        instance = self.get_instance(device_type, serial_number)
+        if instance is None:
+            raise ValueError(f"Device instance '{device_type}:{serial_number}' not found")
+
+        device = instance.device
+        channels = []
+
+        for ch_idx in range(device.channel_count):
+            ch_info: Dict[str, Any] = {
+                "channel_id": ch_idx,
+            }
+
+            # Try to get simulator-specific channel settings (both Simulator and SwabianSimulator)
+            if isinstance(device, (TimeTagSimulator, SwabianSimulator)):
+                ch = device.channel(ch_idx)
+                ch_info.update({
+                    "dead_time_s": ch.dead_time_s,
+                    "threshold_voltage": ch.threshold_voltage,
+                    "enabled": ch.enabled,
+                    "mode": ch.mode,
+                    "period_count": ch.period_count,
+                    "random_count": ch.random_count,
+                })
+            else:
+                # For other devices, use defaults or query the device
+                ch_info.update({
+                    "dead_time_s": 0.0,
+                    "threshold_voltage": 0.0,
+                    "enabled": True,
+                    "mode": None,
+                })
+
+            channels.append(ch_info)
+
+        return channels
+
+    def set_channel_config(
+        self,
+        device_type: str,
+        serial_number: str,
+        channel_id: int,
+        config: Dict[str, Any],
+    ) -> None:
+        """Set channel configuration for a device instance.
+
+        Args:
+            device_type: Device type
+            serial_number: Device serial number
+            channel_id: Channel index
+            config: Configuration dict with optional keys:
+                - dead_time_s: float
+                - threshold_voltage: float
+                - enabled: bool
+                - mode: str
+                - period_count: int
+                - random_count: int
+        """
+        instance = self.get_instance(device_type, serial_number)
+        if instance is None:
+            raise ValueError(f"Device instance '{device_type}:{serial_number}' not found")
+
+        device = instance.device
+
+        if channel_id < 0 or channel_id >= device.channel_count:
+            raise ValueError(f"Channel {channel_id} out of range (0-{device.channel_count-1})")
+
+        # Handle simulator-specific settings (both Simulator and SwabianSimulator)
+        if isinstance(device, (TimeTagSimulator, SwabianSimulator)):
+            ch = device.channel(channel_id)
+
+            # Update allowed fields
+            allowed_fields = {
+                "dead_time_s", "threshold_voltage", "enabled", "mode",
+                "period_count", "random_count", "pulse_count", "pulse_events",
+                "pulse_sigma_s", "reference_pulse_v",
+            }
+
+            for key, value in config.items():
+                if key in allowed_fields and hasattr(ch, key):
+                    setattr(ch, key, value)
+        else:
+            # For other devices, use base device methods
+            if "dead_time_s" in config:
+                device.set_deadtime(channel_id, config["dead_time_s"])
+            if "threshold_voltage" in config:
+                device.set_trigger_level(channel_id, config["threshold_voltage"])
+
+
+# Global instance manager
+instance_manager = DeviceInstanceManager()

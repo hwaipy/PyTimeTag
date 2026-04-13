@@ -19,6 +19,7 @@ from pytimetag.gui.celery_app import create_celery_app
 from pytimetag.gui.config import GuiConfig
 from pytimetag.gui.acquisition import AcquisitionService
 from pytimetag.device.source_registry import list_cli_hardware_sources
+from pytimetag.device.instance_manager import instance_manager
 
 
 class StartSessionRequest(BaseModel):
@@ -36,6 +37,21 @@ class SettingsUpdateRequest(BaseModel):
 class ConfigureAnalyserRequest(BaseModel):
     enabled: bool
     config: Optional[Dict[str, Any]] = None
+
+
+class CreateDeviceRequest(BaseModel):
+    device_type: str = "simulator"
+    serial_number: str
+    channel_count: int = 16
+
+
+class ChannelConfigRequest(BaseModel):
+    dead_time_s: Optional[float] = None
+    threshold_voltage: Optional[float] = None
+    enabled: Optional[bool] = None
+    mode: Optional[str] = None
+    period_count: Optional[int] = None
+    random_count: Optional[int] = None
 
 
 class StorageQueryRequest(BaseModel):
@@ -172,6 +188,113 @@ def create_app(config: GuiConfig) -> FastAPI:
     @app.get("/api/v1/sources")
     async def list_sources() -> Dict[str, Any]:
         return {"items": ["simulator"] + list_cli_hardware_sources()}
+
+    # Device Instance Management APIs
+    @app.get("/api/v1/devices")
+    async def list_devices() -> Dict[str, Any]:
+        """List all running device instances."""
+        return {"items": instance_manager.list_instances()}
+
+    @app.post("/api/v1/devices")
+    async def create_device(body: CreateDeviceRequest) -> Dict[str, Any]:
+        """Create a new device instance."""
+        try:
+            if body.device_type == "simulator":
+                instance = instance_manager.create_simulator(
+                    serial_number=body.serial_number,
+                    channel_count=body.channel_count,
+                )
+            elif body.device_type == "swabian_simulator":
+                instance = instance_manager.create_swabian_simulator(
+                    serial_number=body.serial_number,
+                )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported device type: {body.device_type}"
+                )
+
+            append_log("info", f"Device instance created: {instance.unique_id}")
+            await hub_logs.broadcast_json(
+                {"type": "log", "level": "info", "message": f"Device created: {instance.unique_id}"}
+            )
+            return instance.to_dict()
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/v1/devices/{device_type}/{serial_number}/start")
+    async def start_device(device_type: str, serial_number: str) -> Dict[str, Any]:
+        """Start a device instance."""
+        try:
+            instance_manager.start_instance(device_type, serial_number)
+            append_log("info", f"Device started: {device_type}:{serial_number}")
+            await hub_logs.broadcast_json(
+                {"type": "log", "level": "info", "message": f"Device started: {device_type}:{serial_number}"}
+            )
+            return {"started": True, "device_type": device_type, "serial_number": serial_number}
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/v1/devices/{device_type}/{serial_number}/stop")
+    async def stop_device(device_type: str, serial_number: str) -> Dict[str, Any]:
+        """Stop a device instance."""
+        try:
+            instance_manager.stop_instance(device_type, serial_number)
+            append_log("info", f"Device stopped: {device_type}:{serial_number}")
+            await hub_logs.broadcast_json(
+                {"type": "log", "level": "info", "message": f"Device stopped: {device_type}:{serial_number}"}
+            )
+            return {"stopped": True, "device_type": device_type, "serial_number": serial_number}
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.delete("/api/v1/devices/{device_type}/{serial_number}")
+    async def delete_device(device_type: str, serial_number: str) -> Dict[str, Any]:
+        """Remove a device instance."""
+        try:
+            instance_manager.remove_instance(device_type, serial_number)
+            append_log("info", f"Device removed: {device_type}:{serial_number}")
+            await hub_logs.broadcast_json(
+                {"type": "log", "level": "info", "message": f"Device removed: {device_type}:{serial_number}"}
+            )
+            return {"removed": True, "device_type": device_type, "serial_number": serial_number}
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/v1/devices/{device_type}/{serial_number}/channels")
+    async def get_device_channels(device_type: str, serial_number: str) -> Dict[str, Any]:
+        """Get channel information for a device instance."""
+        try:
+            channels = instance_manager.get_channel_info(device_type, serial_number)
+            return {
+                "device_type": device_type,
+                "serial_number": serial_number,
+                "channels": channels,
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.put("/api/v1/devices/{device_type}/{serial_number}/channels/{channel_id}")
+    async def set_device_channel(
+        device_type: str,
+        serial_number: str,
+        channel_id: int,
+        body: ChannelConfigRequest,
+    ) -> Dict[str, Any]:
+        """Set channel configuration for a device instance."""
+        try:
+            config = body.dict(exclude_unset=True)
+            instance_manager.set_channel_config(device_type, serial_number, channel_id, config)
+            append_log("info", f"Channel {channel_id} updated for {device_type}:{serial_number}")
+            return {
+                "updated": True,
+                "device_type": device_type,
+                "serial_number": serial_number,
+                "channel_id": channel_id,
+                "config": config,
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/v1/analyzers")
     async def get_analyzers() -> Dict[str, Any]:

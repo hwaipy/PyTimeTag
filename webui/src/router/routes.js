@@ -3,7 +3,8 @@ const routes = [
     path: "/",
     component: () => import("../layouts/MainLayout.vue"),
     children: [
-      { path: "", component: () => import("../pages/IndexPage.vue") },
+      { path: "", component: () => import("../pages/DevicesPage.vue") },
+      { path: "dashboard", component: () => import("../pages/IndexPage.vue") },
       { path: "offline", component: () => import("../pages/OfflinePage.vue") },
       { path: "storage", component: () => import("../pages/StoragePage.vue") },
       { path: "settings", component: () => import("../pages/SettingsPage.vue") },
