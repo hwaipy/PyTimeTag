@@ -39,12 +39,6 @@ class ConfigureAnalyserRequest(BaseModel):
     config: Optional[Dict[str, Any]] = None
 
 
-class CreateDeviceRequest(BaseModel):
-    device_type: str = "simulator"
-    serial_number: str
-    channel_count: int = 16
-
-
 class ChannelConfigRequest(BaseModel):
     dead_time_s: Optional[float] = None
     threshold_voltage: Optional[float] = None
@@ -144,6 +138,20 @@ def create_app(config: GuiConfig) -> FastAPI:
     )
     append_log("info", "GUI API initialized")
 
+    # Register default device instances for the web UI on startup.
+    try:
+        instance_manager.create_simulator(serial_number="simulator", channel_count=16)
+        append_log("info", "Default simulator device registered: simulator:simulator")
+    except ValueError:
+        # Another worker/process may have created it already.
+        pass
+    try:
+        instance_manager.create_swabian_simulator(serial_number="Simulator")
+        append_log("info", "Default simulator device registered: swabian_simulator:Simulator")
+    except ValueError:
+        # Another worker/process may have created it already.
+        pass
+
     def read_settings() -> Dict[str, Any]:
         rows = conn.execute("SELECT key, value_json FROM GUISettings").fetchall()
         result: Dict[str, Any] = {}
@@ -195,33 +203,6 @@ def create_app(config: GuiConfig) -> FastAPI:
         """List all running device instances."""
         return {"items": instance_manager.list_instances()}
 
-    @app.post("/api/v1/devices")
-    async def create_device(body: CreateDeviceRequest) -> Dict[str, Any]:
-        """Create a new device instance."""
-        try:
-            if body.device_type == "simulator":
-                instance = instance_manager.create_simulator(
-                    serial_number=body.serial_number,
-                    channel_count=body.channel_count,
-                )
-            elif body.device_type == "swabian_simulator":
-                instance = instance_manager.create_swabian_simulator(
-                    serial_number=body.serial_number,
-                )
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unsupported device type: {body.device_type}"
-                )
-
-            append_log("info", f"Device instance created: {instance.unique_id}")
-            await hub_logs.broadcast_json(
-                {"type": "log", "level": "info", "message": f"Device created: {instance.unique_id}"}
-            )
-            return instance.to_dict()
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
     @app.post("/api/v1/devices/{device_type}/{serial_number}/start")
     async def start_device(device_type: str, serial_number: str) -> Dict[str, Any]:
         """Start a device instance."""
@@ -245,19 +226,6 @@ def create_app(config: GuiConfig) -> FastAPI:
                 {"type": "log", "level": "info", "message": f"Device stopped: {device_type}:{serial_number}"}
             )
             return {"stopped": True, "device_type": device_type, "serial_number": serial_number}
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    @app.delete("/api/v1/devices/{device_type}/{serial_number}")
-    async def delete_device(device_type: str, serial_number: str) -> Dict[str, Any]:
-        """Remove a device instance."""
-        try:
-            instance_manager.remove_instance(device_type, serial_number)
-            append_log("info", f"Device removed: {device_type}:{serial_number}")
-            await hub_logs.broadcast_json(
-                {"type": "log", "level": "info", "message": f"Device removed: {device_type}:{serial_number}"}
-            )
-            return {"removed": True, "device_type": device_type, "serial_number": serial_number}
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

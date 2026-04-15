@@ -210,21 +210,8 @@ export const useRuntimeStore = defineStore("runtime", {
       const res = await this._request(`${API_BASE}/devices`);
       const data = await res.json();
       this.devices = data.items || [];
+      console.log("[PyTimeTag] devices fetched:", this.devices);
       return this.devices;
-    },
-    async createDevice(deviceType, serialNumber, channelCount = 16) {
-      const res = await this._request(`${API_BASE}/devices`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          device_type: deviceType,
-          serial_number: serialNumber,
-          channel_count: channelCount,
-        }),
-      });
-      const device = await res.json();
-      await this.fetchDevices();
-      return device;
     },
     async startDevice(deviceType, serialNumber) {
       await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/start`, {
@@ -235,12 +222,6 @@ export const useRuntimeStore = defineStore("runtime", {
     async stopDevice(deviceType, serialNumber) {
       await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/stop`, {
         method: "POST",
-      });
-      await this.fetchDevices();
-    },
-    async deleteDevice(deviceType, serialNumber) {
-      await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}`, {
-        method: "DELETE",
       });
       await this.fetchDevices();
     },

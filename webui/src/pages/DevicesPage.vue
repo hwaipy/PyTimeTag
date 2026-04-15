@@ -17,7 +17,9 @@
         <div class="apple-card-body">
           <div class="device-dropdown">
             <button class="apple-btn apple-btn-light dropdown-trigger" @click="showDeviceList = !showDeviceList">
-              <span v-if="selectedDevice">{{ selectedDevice.serial_number }}</span>
+              <span v-if="selectedDevice">
+                {{ (selectedDevice.manufacturer || selectedDevice.device_type) }} / {{ selectedDevice.serial_number }}
+              </span>
               <span v-else>Choose a device...</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" :style="{ transform: showDeviceList ? 'rotate(180deg)' : '' }">
                 <path d="M7 10l5 5 5-5z"/>
@@ -33,7 +35,7 @@
                 @click="selectDevice(device)"
               >
                 <div class="device-option">
-                  <span class="device-type-tag">{{ device.device_type }}</span>
+                  <span class="device-type-tag">{{ device.manufacturer || device.device_type }}</span>
                   <span class="device-serial">{{ device.serial_number }}</span>
                   <span class="device-channels">{{ device.channel_count }}ch</span>
                 </div>
@@ -54,25 +56,6 @@
                 {{ selectedDevice.running ? 'Stop' : 'Start' }}
               </button>
             </template>
-            <div class="dropdown" style="position: relative;">
-              <button class="apple-btn apple-btn-outline" @click="showCreateMenu = !showCreateMenu">
-                + New Device
-              </button>
-              <div v-if="showCreateMenu" class="dropdown-menu" style="right: 0; left: auto; min-width: 200px;">
-                <div class="dropdown-item" @click="createSimulator">
-                  <div class="device-option">
-                    <span class="device-type-tag">16ch</span>
-                    <span>Standard Simulator</span>
-                  </div>
-                </div>
-                <div class="dropdown-item" @click="createSwabianSimulator">
-                  <div class="device-option">
-                    <span class="device-type-tag" style="background: rgba(0,113,227,0.1); color: #0071e3;">8ch</span>
-                    <span>Swabian Simulator</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -225,7 +208,6 @@ const availableDevices = ref([]);
 const selectedDevice = ref(null);
 const channels = ref([]);
 const showDeviceList = ref(false);
-const showCreateMenu = ref(false);
 const editingChannel = ref(null);
 
 const editForm = reactive({
@@ -250,9 +232,19 @@ function formatVoltage(voltage) {
   return `${voltage > 0 ? '+' : ''}${voltage.toFixed(2)} V`;
 }
 
+function pickDefaultDevice(devices) {
+  if (!Array.isArray(devices) || devices.length === 0) return null;
+  return devices.find((device) => device.device_type === "simulator") || devices[0];
+}
+
 async function loadDevices() {
   await store.fetchDevices();
   availableDevices.value = store.devices;
+  const selectedId = selectedDevice.value?.unique_id;
+  const refreshedSelection = selectedId
+    ? availableDevices.value.find((device) => device.unique_id === selectedId)
+    : null;
+  selectedDevice.value = refreshedSelection || pickDefaultDevice(availableDevices.value);
 }
 
 async function selectDevice(device) {
@@ -284,36 +276,6 @@ async function toggleDevice() {
       await store.startDevice(device_type, serial_number);
     }
     await loadDevices();
-  } catch (err) {
-    alert(err.message);
-  }
-}
-
-async function createSimulator() {
-  showCreateMenu.value = false;
-  const serial = `SIM-${Date.now().toString(36).toUpperCase()}`;
-  try {
-    await store.createDevice("simulator", serial, 16);
-    await loadDevices();
-    const newDevice = availableDevices.value.find(d => d.serial_number === serial);
-    if (newDevice) {
-      await selectDevice(newDevice);
-    }
-  } catch (err) {
-    alert(err.message);
-  }
-}
-
-async function createSwabianSimulator() {
-  showCreateMenu.value = false;
-  const serial = `SWABIAN-${Date.now().toString(36).toUpperCase()}`;
-  try {
-    await store.createDevice("swabian_simulator", serial, 8);
-    await loadDevices();
-    const newDevice = availableDevices.value.find(d => d.serial_number === serial);
-    if (newDevice) {
-      await selectDevice(newDevice);
-    }
   } catch (err) {
     alert(err.message);
   }
@@ -363,8 +325,9 @@ async function saveChannel() {
   }
 }
 
-onMounted(() => {
-  loadDevices();
+onMounted(async () => {
+  await loadDevices();
+  await loadChannels();
 });
 </script>
 

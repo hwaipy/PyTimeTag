@@ -31,7 +31,7 @@
           @click="selectDevice(device)"
         >
           <div class="device-item-info">
-            <span class="device-item-name">{{ device.device_type }}</span>
+            <span class="device-item-name">{{ device.manufacturer || device.device_type }}</span>
             <span class="device-item-serial">{{ device.serial_number }}</span>
           </div>
           <span v-if="device.running" class="device-status-dot"></span>
@@ -52,28 +52,29 @@ const store = useRuntimeStore();
 const isOpen = ref(false);
 const selectorRef = ref(null);
 
+function pickDefaultDevice(devices) {
+  if (!Array.isArray(devices) || devices.length === 0) return null;
+  return devices.find((device) => device.device_type === "simulator") || devices[0];
+}
+
 const displayName = computed(() => {
-  if (store.currentDevice) {
-    return store.currentDevice.device_type;
-  }
-  if (store.devices.length > 0) {
-    return store.devices[0].device_type;
+  const current = store.currentDevice || pickDefaultDevice(store.devices);
+  if (current) {
+    return current.manufacturer || current.device_type;
   }
   return "No Device";
 });
 
 const displaySerial = computed(() => {
-  if (store.currentDevice) {
-    return store.currentDevice.serial_number;
-  }
-  if (store.devices.length > 0) {
-    return store.devices[0].serial_number;
+  const current = store.currentDevice || pickDefaultDevice(store.devices);
+  if (current) {
+    return current.serial_number;
   }
   return "";
 });
 
 function isCurrent(device) {
-  const current = store.currentDevice || store.devices[0] || null;
+  const current = store.currentDevice || pickDefaultDevice(store.devices);
   if (!current) return false;
   return device.unique_id === current.unique_id;
 }
@@ -93,10 +94,13 @@ function handleClickOutside(event) {
   }
 }
 
-onMounted(() => {
-  store.fetchDevices();
-  if (!store.currentDevice && store.devices.length > 0) {
-    store.currentDevice = store.devices[0];
+onMounted(async () => {
+  await store.fetchDevices();
+  const stillExists = store.currentDevice
+    ? store.devices.some((device) => device.unique_id === store.currentDevice.unique_id)
+    : false;
+  if (!stillExists) {
+    store.currentDevice = pickDefaultDevice(store.devices);
   }
   document.addEventListener("click", handleClickOutside);
 });

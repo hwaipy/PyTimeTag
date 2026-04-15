@@ -36,10 +36,21 @@ class DeviceInstance:
     def unique_id(self) -> str:
         return f"{self.device_type}:{self.serial_number}"
 
+    @property
+    def manufacturer(self) -> str:
+        if self.device_type == "simulator":
+            return "Simulator"
+        if self.device_type == "swabian_simulator":
+            return "Swabian"
+        if self.model_name:
+            return self.model_name
+        return self.device_type
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize instance metadata (not the device itself)."""
         return {
             "device_type": self.device_type,
+            "manufacturer": self.manufacturer,
             "serial_number": self.serial_number,
             "model_name": self.model_name,
             "unique_id": self.unique_id,
@@ -94,8 +105,8 @@ class DeviceInstanceManager:
             device = TimeTagSimulator(
                 dataUpdate=data_callback,
                 channel_count=channel_count,
-                serial_number=serial_number,
             )
+            device.serial_number = serial_number
 
             instance = DeviceInstance(
                 device_type="simulator",

@@ -439,38 +439,6 @@ describe('Runtime Store', () => {
       expect(result).toEqual(mockResponse.items)
     })
 
-    it('should create a device', async () => {
-      const createResponse = {
-        device_type: 'simulator',
-        serial_number: 'SIM-002',
-        channel_count: 8,
-        unique_id: 'simulator:SIM-002',
-      }
-      fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => createResponse,
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ items: [createResponse] }),
-        })
-
-      const store = useRuntimeStore()
-      const result = await store.createDevice('simulator', 'SIM-002', 8)
-
-      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          device_type: 'simulator',
-          serial_number: 'SIM-002',
-          channel_count: 8,
-        }),
-      })
-      expect(result.unique_id).toBe('simulator:SIM-002')
-    })
-
     it('should start a device', async () => {
       fetch
         .mockResolvedValueOnce({
@@ -506,25 +474,6 @@ describe('Runtime Store', () => {
 
       expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices/simulator/SIM-001/stop', {
         method: 'POST',
-      })
-    })
-
-    it('should delete a device', async () => {
-      fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ removed: true }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ items: [] }),
-        })
-
-      const store = useRuntimeStore()
-      await store.deleteDevice('simulator', 'SIM-001')
-
-      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices/simulator/SIM-001', {
-        method: 'DELETE',
       })
     })
 
