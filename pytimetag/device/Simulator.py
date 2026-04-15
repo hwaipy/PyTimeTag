@@ -196,6 +196,7 @@ class TimeTagSimulator(TimeTagDevice):
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._channel_count_rates: List[float] = [0.0] * self._channel_count
+        self._update_chunk_count_rates = True
 
     @property
     def channel_count(self) -> int:
@@ -235,6 +236,10 @@ class TimeTagSimulator(TimeTagDevice):
             "mode": ch.mode,
             "period_count": ch.period_count,
             "random_count": ch.random_count,
+            "pulse_count": ch.pulse_count,
+            "pulse_events": ch.pulse_events,
+            "pulse_sigma_s": ch.pulse_sigma_s,
+            "reference_pulse_v": ch.reference_pulse_v,
         }
 
     def get_channel_count_rates(self) -> List[float]:
@@ -379,12 +384,13 @@ class TimeTagSimulator(TimeTagDevice):
         return raw
 
     def _synthesize_pulse_ticks(self, t0: int, t1: int, ch: ChannelSettings) -> np.ndarray:
-        """Same layout as ``DataBlock.generate`` Pulse mode (per-batch slot count and event count)."""
+        """Pulse mode: ``pulse_count`` and ``pulse_events`` are per-second rates."""
         span_ticks = t1 - t0
         if span_ticks <= 0:
             return np.array([], dtype=np.int64)
-        pulse_count = int(ch.pulse_count)
-        event_count = int(ch.pulse_events)
+        dt_s = span_ticks * self.resolution
+        pulse_count = max(1, int(round(ch.pulse_count * dt_s)))
+        event_count = max(1, int(round(ch.pulse_events * dt_s)))
         sigma_ticks = float(ch.pulse_sigma_s) / self.resolution
         if pulse_count < 1 or event_count < 1:
             return np.array([], dtype=np.int64)
@@ -455,9 +461,10 @@ class TimeTagSimulator(TimeTagDevice):
         t1 = t0 + span_ticks
         content = self._synthesize_content(t0, t1)
         self._cursor = t1
-        dt_s = span_ticks * self.resolution
-        for ch_idx, ts in enumerate(content):
-            self._channel_count_rates[ch_idx] = int(ts.size / dt_s) if dt_s > 0 else 0
+        if self._update_chunk_count_rates:
+            dt_s = span_ticks * self.resolution
+            for ch_idx, ts in enumerate(content):
+                self._channel_count_rates[ch_idx] = int(ts.size / dt_s) if dt_s > 0 else 0
         arr = self._content_to_packed_stream(content)
         self._dataUpdate(arr)
 

@@ -6,13 +6,19 @@ Each instance is identified by a unique key: "{device_type}:{serial_number}"
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 from pytimetag.device.base import DeviceInfo, TimeTagDevice
+from pytimetag.device.datablock_packer import (
+    DataBlockPackerPath,
+    DataBlockStreamPacker,
+    SplitByChannelEvent,
+    SplitByTimeWindow,
+)
 from pytimetag.device.manager import device_type_manager
-from pytimetag.device.Simulator import TimeTagSimulator
+from pytimetag.device.Simulator import MAX_PACKED_CHANNELS, TimeTagSimulator
 from pytimetag.device.SwabianSimulator import SwabianSimulator
 
 DEVICE_LIMITS: Dict[str, Dict[str, Tuple[float, float]]] = {
@@ -113,6 +119,7 @@ class DeviceInstanceManager:
         serial_number: str = "SIMULATOR",
         channel_count: int = 16,
         data_callback: Optional[Callable[[np.ndarray], None]] = None,
+        split: Optional[Union[SplitByTimeWindow, SplitByChannelEvent]] = None,
     ) -> DeviceInstance:
         """Create a standard 16-channel simulator instance.
 
@@ -120,6 +127,7 @@ class DeviceInstanceManager:
             serial_number: Unique serial for this simulator instance
             channel_count: Number of channels (default 16)
             data_callback: Optional callback for data updates
+            split: DataBlock split policy for count-rate calculation
         """
         key = f"simulator:{serial_number}"
 
@@ -130,17 +138,55 @@ class DeviceInstanceManager:
             if data_callback is None:
                 data_callback = lambda x: None
 
+            if split is None:
+                split = SplitByTimeWindow(int(1e12))
+
+            packer = DataBlockStreamPacker(
+                [DataBlockPackerPath("stream", split, channel_count=MAX_PACKED_CHANNELS, resolution=1e-12)]
+            )
+
             device = TimeTagSimulator(
                 dataUpdate=data_callback,
                 channel_count=channel_count,
             )
             device.serial_number = serial_number
+            device._update_chunk_count_rates = False
+            device._channel_count_rates = [0.0] * channel_count
+
+            def _wrapped_callback(words: np.ndarray) -> None:
+                data_callback(words)
+                produced = packer.feed_from_packed(words)
+                for blocks in produced.values():
+                    for block in blocks:
+                        duration_ticks = getattr(block, "duration_ticks", block.dataTimeEnd - block.dataTimeBegin)
+                        duration_s = max(duration_ticks * block.resolution, 1e-15)
+                        for ch_idx in range(min(len(block.sizes), channel_count)):
+                            device._channel_count_rates[ch_idx] = int(block.sizes[ch_idx] / duration_s)
+
+            device._dataUpdate = _wrapped_callback
+
+            original_start = device.start
+            original_stop = device.stop
+
+            def _wrapped_start() -> None:
+                packer.reset()
+                original_start()
+
+            def _wrapped_stop() -> None:
+                original_stop()
+                packer.flush()
+                for i in range(channel_count):
+                    device._channel_count_rates[i] = 0.0
+
+            device.start = _wrapped_start
+            device.stop = _wrapped_stop
+
             device.set_channel(
                 0,
                 mode="Period",
                 period_count=5_000,
                 dead_time_s=10e-9,
-                threshold_voltage=-1.0,
+                threshold_voltage=0.5,
                 reference_pulse_v=1.0,
             )
             for ch_idx in range(1, device.channel_count):
@@ -149,7 +195,7 @@ class DeviceInstanceManager:
                     mode="Random",
                     random_count=50_000,
                     dead_time_s=10e-9,
-                    threshold_voltage=-1.0,
+                    threshold_voltage=0.5,
                     reference_pulse_v=1.0,
                 )
 
@@ -167,12 +213,14 @@ class DeviceInstanceManager:
         self,
         serial_number: str = "SWABIAN-001",
         data_callback: Optional[Callable[[np.ndarray], None]] = None,
+        split: Optional[Union[SplitByTimeWindow, SplitByChannelEvent]] = None,
     ) -> DeviceInstance:
         """Create a Swabian-style 8-channel simulator instance.
 
         Args:
             serial_number: Unique serial for this swabian simulator instance
             data_callback: Optional callback for data updates
+            split: DataBlock split policy for count-rate calculation
         """
         key = f"swabian_simulator:{serial_number}"
 
@@ -183,16 +231,55 @@ class DeviceInstanceManager:
             if data_callback is None:
                 data_callback = lambda x: None
 
+            if split is None:
+                split = SplitByTimeWindow(int(1e12))
+
+            channel_count = 8
+            packer = DataBlockStreamPacker(
+                [DataBlockPackerPath("stream", split, channel_count=MAX_PACKED_CHANNELS, resolution=1e-12)]
+            )
+
             device = SwabianSimulator(
                 dataUpdate=data_callback,
                 serial_number=serial_number,
             )
+            device._update_chunk_count_rates = False
+            device._channel_count_rates = [0.0] * channel_count
+
+            def _wrapped_callback(words: np.ndarray) -> None:
+                data_callback(words)
+                produced = packer.feed_from_packed(words)
+                for blocks in produced.values():
+                    for block in blocks:
+                        duration_ticks = getattr(block, "duration_ticks", block.dataTimeEnd - block.dataTimeBegin)
+                        duration_s = max(duration_ticks * block.resolution, 1e-15)
+                        for ch_idx in range(min(len(block.sizes), channel_count)):
+                            device._channel_count_rates[ch_idx] = int(block.sizes[ch_idx] / duration_s)
+
+            device._dataUpdate = _wrapped_callback
+
+            original_start = device.start
+            original_stop = device.stop
+
+            def _wrapped_start() -> None:
+                packer.reset()
+                original_start()
+
+            def _wrapped_stop() -> None:
+                original_stop()
+                packer.flush()
+                for i in range(channel_count):
+                    device._channel_count_rates[i] = 0.0
+
+            device.start = _wrapped_start
+            device.stop = _wrapped_stop
+
             device.set_channel(
                 0,
                 mode="Period",
                 period_count=5_000,
                 dead_time_s=5e-9,
-                threshold_voltage=-1.0,
+                threshold_voltage=0.5,
                 reference_pulse_v=1.0,
             )
             for ch_idx in range(1, device.channel_count):
@@ -201,7 +288,7 @@ class DeviceInstanceManager:
                     mode="Random",
                     random_count=50_000,
                     dead_time_s=5e-9,
-                    threshold_voltage=-1.0,
+                    threshold_voltage=0.5,
                     reference_pulse_v=1.0,
                 )
 
@@ -292,6 +379,10 @@ class DeviceInstanceManager:
                         "mode": ch.mode,
                         "period_count": ch.period_count,
                         "random_count": ch.random_count,
+                        "pulse_count": ch.pulse_count,
+                        "pulse_events": ch.pulse_events,
+                        "pulse_sigma_s": ch.pulse_sigma_s,
+                        "reference_pulse_v": ch.reference_pulse_v,
                     })
                 else:
                     ch_info.update({

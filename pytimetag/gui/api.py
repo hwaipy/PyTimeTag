@@ -46,6 +46,10 @@ class ChannelConfigRequest(BaseModel):
     mode: Optional[str] = None
     period_count: Optional[int] = None
     random_count: Optional[int] = None
+    pulse_count: Optional[int] = None
+    pulse_events: Optional[int] = None
+    pulse_sigma_s: Optional[float] = None
+    reference_pulse_v: Optional[float] = None
 
 
 class StorageQueryRequest(BaseModel):

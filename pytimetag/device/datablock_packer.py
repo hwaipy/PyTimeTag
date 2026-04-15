@@ -152,7 +152,7 @@ class DataBlockPackerPath:
 
 
 class _LaneState:
-    __slots__ = ('cfg', 'mask', 'skip_channel_filter', 'buf_ts_parts', 'buf_ch_parts', 'buf_size')
+    __slots__ = ('cfg', 'mask', 'skip_channel_filter', 'buf_ts_parts', 'buf_ch_parts', 'buf_size', 'last_trigger_ts')
 
     def __init__(self, cfg: DataBlockPackerPath):
         if cfg.channel_count != MAX_PACKED_CHANNELS:
@@ -165,6 +165,17 @@ class _LaneState:
         self.buf_ts_parts: List[np.ndarray] = []
         self.buf_ch_parts: List[np.ndarray] = []
         self.buf_size = 0
+        self.last_trigger_ts: Optional[int] = None
+
+
+def _buffer_ts_at_index(ln: _LaneState, idx: int) -> int:
+    consumed = 0
+    for part_ts in ln.buf_ts_parts:
+        n = int(part_ts.size)
+        if idx < consumed + n:
+            return int(np.int64(part_ts[idx - consumed]))
+        consumed += n
+    raise ValueError('index out of bounds')
 
 
 class DataBlockStreamPacker:
@@ -203,6 +214,7 @@ class DataBlockStreamPacker:
         ts_sections: Sequence[np.ndarray],
         ch_sections: Sequence[np.ndarray],
         creation_ms: float,
+        duration_ticks: Optional[int] = None,
     ) -> DataBlock:
         if not ts_sections:
             raise ValueError('internal: empty emit')
@@ -216,6 +228,8 @@ class DataBlockStreamPacker:
         t0 = int(np.int64(ts_sections[0][0]))
         t1 = int(np.int64(ts_sections[-1][-1]))
         db = DataBlock.create(content, creation_ms, t0, t1, resolution=ln.cfg.resolution)
+        if duration_ticks is not None:
+            db.duration_ticks = duration_ticks
         return db
 
     def _split_prefix_sections(
@@ -272,6 +286,7 @@ class DataBlockStreamPacker:
         split_cfg = ln.cfg.split
 
         while ln.buf_size > 0:
+            duration_ticks: Optional[int] = None
             if isinstance(split_cfg, SplitByTimeWindow):
                 w = split_cfg.window_ticks
                 if w <= 0:
@@ -290,6 +305,7 @@ class DataBlockStreamPacker:
                     break
                 if split == ln.buf_size:
                     break
+                duration_ticks = w
                 emit_ts_parts, emit_ch_parts = self._split_prefix_sections(ln, split)
             elif isinstance(split_cfg, SplitByChannelEvent):
                 trig = split_cfg.channel
@@ -329,15 +345,25 @@ class DataBlockStreamPacker:
                     # Keep trigger-at-head semantics from previous implementation:
                     # emit up to (but not including) the next trigger event.
                     take = second
+                    first_trigger_ts = int(np.int64(ln.buf_ts_parts[0][0]))
+                    second_trigger_ts = _buffer_ts_at_index(ln, second)
+                    duration_ticks = second_trigger_ts - first_trigger_ts
+                    ln.last_trigger_ts = second_trigger_ts
                 else:
                     take = first
+                    trigger_ts = _buffer_ts_at_index(ln, first)
+                    if ln.last_trigger_ts is not None:
+                        duration_ticks = trigger_ts - ln.last_trigger_ts
+                    else:
+                        duration_ticks = trigger_ts - int(np.int64(ln.buf_ts_parts[0][0]))
+                    ln.last_trigger_ts = trigger_ts
                 emit_ts_parts, emit_ch_parts = self._split_prefix_sections(ln, take)
             else:
                 raise TypeError(type(split_cfg))
 
             if not emit_ts_parts:
                 continue
-            out.append(self._emit_block_sections(ln, emit_ts_parts, emit_ch_parts, creation_ms))
+            out.append(self._emit_block_sections(ln, emit_ts_parts, emit_ch_parts, creation_ms, duration_ticks))
         return out
 
     def feed(self, timestamps: np.ndarray, channels: np.ndarray) -> Dict[str, List[DataBlock]]:
