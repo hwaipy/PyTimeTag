@@ -24,52 +24,62 @@
       </template>
 
       <template #body-cell-threshold="props">
-        <q-td
-          :props="props"
-          @click="beginEdit(props.row.channel_id, 'threshold_voltage')"
-        >
-          <q-input
-            v-if="editingCell === cellKey(props.row.channel_id, 'threshold_voltage')"
-            v-model.number="editValues[props.row.channel_id].threshold_voltage"
-            class="cell-input"
-            dense
-            outlined
-            type="number"
-            step="0.01"
-            autofocus
-            :loading="isCellSaving(props.row.channel_id, 'threshold_voltage')"
-            @blur="finishEdit(props.row.channel_id, 'threshold_voltage')"
-            @keyup.enter="finishEdit(props.row.channel_id, 'threshold_voltage')"
-          />
-          <span v-else class="channel-value editable-cell">
-            {{ formatThresholdDisplay(editValues[props.row.channel_id]?.threshold_voltage) }}
-          </span>
+        <q-td :props="props">
+          <div class="cell-editor-shell">
+            <q-input
+              v-if="editingCell === cellKey(props.row.channel_id, 'threshold_voltage')"
+              v-model.number="editValues[props.row.channel_id].threshold_voltage"
+              class="cell-input"
+              dense
+              outlined
+            hide-bottom-space
+              type="number"
+              step="0.01"
+              autofocus
+              :loading="isCellSaving(props.row.channel_id, 'threshold_voltage')"
+              @blur="finishEdit(props.row.channel_id, 'threshold_voltage')"
+              @keyup.enter="finishEdit(props.row.channel_id, 'threshold_voltage')"
+            @keyup.esc.stop.prevent="cancelEdit(props.row.channel_id, 'threshold_voltage')"
+            />
+            <span
+              v-else
+              class="channel-value editable-cell cell-display-value"
+              @click.stop="beginEdit(props.row.channel_id, 'threshold_voltage')"
+            >
+              {{ formatThresholdDisplay(editValues[props.row.channel_id]?.threshold_voltage) }}
+            </span>
+          </div>
         </q-td>
       </template>
 
       <template #body-cell-dead_time="props">
-        <q-td
-          :props="props"
-          @click="beginEdit(props.row.channel_id, 'dead_time_ns')"
-        >
-          <q-input
-            v-if="editingCell === cellKey(props.row.channel_id, 'dead_time_ns')"
-            v-model.number="editValues[props.row.channel_id].dead_time_ns"
-            class="cell-input"
-            dense
-            outlined
-            type="number"
-            step="0.1"
-            min="0"
-            suffix="ns"
-            autofocus
-            :loading="isCellSaving(props.row.channel_id, 'dead_time_ns')"
-            @blur="finishEdit(props.row.channel_id, 'dead_time_ns')"
-            @keyup.enter="finishEdit(props.row.channel_id, 'dead_time_ns')"
-          />
-          <span v-else class="channel-value editable-cell">
-            {{ formatDeadTimeDisplay(editValues[props.row.channel_id]?.dead_time_ns) }}
-          </span>
+        <q-td :props="props">
+          <div class="cell-editor-shell">
+            <q-input
+              v-if="editingCell === cellKey(props.row.channel_id, 'dead_time_ns')"
+              v-model.number="editValues[props.row.channel_id].dead_time_ns"
+              class="cell-input"
+              dense
+              outlined
+            hide-bottom-space
+              type="number"
+              step="0.1"
+              min="0"
+              suffix="ns"
+              autofocus
+              :loading="isCellSaving(props.row.channel_id, 'dead_time_ns')"
+              @blur="finishEdit(props.row.channel_id, 'dead_time_ns')"
+              @keyup.enter="finishEdit(props.row.channel_id, 'dead_time_ns')"
+            @keyup.esc.stop.prevent="cancelEdit(props.row.channel_id, 'dead_time_ns')"
+            />
+            <span
+              v-else
+              class="channel-value editable-cell cell-display-value"
+              @click.stop="beginEdit(props.row.channel_id, 'dead_time_ns')"
+            >
+              {{ formatDeadTimeDisplay(editValues[props.row.channel_id]?.dead_time_ns) }}
+            </span>
+          </div>
         </q-td>
       </template>
     </q-table>
@@ -92,6 +102,11 @@ const tableColumns = [
   { name: "dead_time", label: "Dead Time (ns)", field: "dead_time", align: "right" },
 ];
 
+function truncateTo(value, digits) {
+  const factor = 10 ** digits;
+  return Math.trunc(value * factor) / factor;
+}
+
 function pickDefaultDevice(devices) {
   if (!Array.isArray(devices) || devices.length === 0) return null;
   return devices.find((device) => device.device_type === "simulator") || devices[0];
@@ -111,7 +126,8 @@ function formatCountRate(channel) {
 
 function formatThresholdDisplay(voltage) {
   if (!Number.isFinite(voltage)) return "-";
-  return `${voltage > 0 ? "+" : ""}${Number(voltage).toFixed(2)} V`;
+  const truncated = truncateTo(Number(voltage), 3);
+  return `${truncated > 0 ? "+" : ""}${truncated.toFixed(3)} V`;
 }
 
 function formatDeadTimeDisplay(deadTimeNs) {
@@ -152,11 +168,18 @@ async function finishEdit(channelId, field) {
   }
 }
 
+function cancelEdit(channelId, field) {
+  syncEditValuesFromChannels();
+  if (editingCell.value === cellKey(channelId, field)) {
+    editingCell.value = "";
+  }
+}
+
 function syncEditValuesFromChannels() {
   const next = {};
   for (const ch of channels.value) {
     next[ch.channel_id] = {
-      threshold_voltage: Number(ch.threshold_voltage ?? 0),
+      threshold_voltage: truncateTo(Number(ch.threshold_voltage ?? 0), 3),
       dead_time_ns: Number(((ch.dead_time_s ?? 0) * 1e9).toFixed(3)),
     };
   }
@@ -177,7 +200,9 @@ async function saveChannelValue(channelId, field) {
       syncEditValuesFromChannels();
       return;
     }
-    payload.threshold_voltage = value;
+    const truncatedValue = truncateTo(value, 3);
+    row.threshold_voltage = truncatedValue;
+    payload.threshold_voltage = truncatedValue;
   } else if (field === "dead_time_ns") {
     const value = Number(row.dead_time_ns);
     if (!Number.isFinite(value) || value < 0) {
@@ -316,11 +341,20 @@ onMounted(async () => {
 }
 
 .cell-input {
+  width: 100%;
+}
+
+.cell-editor-shell {
   width: 132px;
+  height: 38px;
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .cell-input :deep(.q-field__control) {
+  height: 38px;
   min-height: 38px;
 }
 
@@ -328,10 +362,40 @@ onMounted(async () => {
   font-family: "SF Mono", Monaco, monospace;
   font-size: 13px;
   text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.cell-input :deep(input::-webkit-outer-spin-button),
+.cell-input :deep(input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cell-input :deep(.q-field__native),
+.cell-input :deep(.q-field__prefix),
+.cell-input :deep(.q-field__suffix),
+.cell-input :deep(.q-field__append),
+.cell-input :deep(.q-field__prepend) {
+  height: 38px;
+  min-height: 38px;
+  align-items: center;
+}
+
+.cell-input :deep(.q-field__bottom) {
+  display: none;
 }
 
 .editable-cell {
   cursor: text;
   user-select: none;
+}
+
+.cell-display-value {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  text-align: right;
 }
 </style>

@@ -55,16 +55,18 @@
       @click="toggleRunning"
     >
       <span v-if="isSwitching" class="run-spinner"></span>
-      <svg
-        v-else
-        class="run-arrow"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-      >
-        <path d="M8 5v14l11-7z"/>
-      </svg>
+      <template v-else>
+        <svg
+          class="run-arrow"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <span class="run-stop-square"></span>
+      </template>
     </button>
   </div>
 </template>
@@ -349,6 +351,30 @@ onUnmounted(() => {
 
 .device-run-toggle.running .run-arrow {
   filter: drop-shadow(0 0 6px rgba(102, 217, 110, 0.75));
+}
+
+.run-stop-square {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: #ff5f57;
+  box-shadow: 0 0 8px rgba(255, 95, 87, 0.45);
+  display: none;
+}
+
+.device-run-toggle.running:hover .run-arrow {
+  display: none;
+}
+
+.device-run-toggle.running:hover {
+  color: #ff5f57;
+  border-color: rgba(255, 95, 87, 0.72);
+  background: rgba(255, 95, 87, 0.16);
+  box-shadow: 0 0 12px rgba(255, 95, 87, 0.5), 0 0 22px rgba(255, 95, 87, 0.28);
+}
+
+.device-run-toggle.running:hover .run-stop-square {
+  display: inline-block;
 }
 
 .run-spinner {
