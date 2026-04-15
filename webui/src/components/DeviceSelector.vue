@@ -389,10 +389,10 @@ onUnmounted(() => {
 @keyframes running-glow {
   0%,
   100% {
-    box-shadow: 0 0 10px rgba(76, 175, 80, 0.42), 0 0 20px rgba(76, 175, 80, 0.2);
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.55), 0 0 18px rgba(76, 175, 80, 0.35), 0 0 32px rgba(76, 175, 80, 0.18);
   }
   50% {
-    box-shadow: 0 0 16px rgba(76, 175, 80, 0.62), 0 0 30px rgba(76, 175, 80, 0.34);
+    box-shadow: 0 0 14px rgba(76, 175, 80, 0.85), 0 0 28px rgba(76, 175, 80, 0.55), 0 0 48px rgba(76, 175, 80, 0.32);
   }
 }
 

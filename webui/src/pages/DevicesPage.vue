@@ -32,14 +32,18 @@
               class="cell-input"
               dense
               outlined
-            hide-bottom-space
+              hide-bottom-space
               type="number"
               step="0.01"
+              :min="thresholdRange[0]"
+              :max="thresholdRange[1]"
               autofocus
+              :data-edit-key="cellKey(props.row.channel_id, 'threshold_voltage')"
               :loading="isCellSaving(props.row.channel_id, 'threshold_voltage')"
               @blur="finishEdit(props.row.channel_id, 'threshold_voltage')"
               @keyup.enter="finishEdit(props.row.channel_id, 'threshold_voltage')"
-            @keyup.esc.stop.prevent="cancelEdit(props.row.channel_id, 'threshold_voltage')"
+              @keyup.esc.stop.prevent="cancelEdit(props.row.channel_id, 'threshold_voltage')"
+              @keydown.tab.stop.prevent="handleTabNavigate(props.row.channel_id, 'threshold_voltage', $event)"
             />
             <span
               v-else
@@ -61,16 +65,19 @@
               class="cell-input"
               dense
               outlined
-            hide-bottom-space
+              hide-bottom-space
               type="number"
               step="0.1"
-              min="0"
+              :min="deadTimeRangeNs[0]"
+              :max="deadTimeRangeNs[1]"
               suffix="ns"
               autofocus
+              :data-edit-key="cellKey(props.row.channel_id, 'dead_time_ns')"
               :loading="isCellSaving(props.row.channel_id, 'dead_time_ns')"
               @blur="finishEdit(props.row.channel_id, 'dead_time_ns')"
               @keyup.enter="finishEdit(props.row.channel_id, 'dead_time_ns')"
-            @keyup.esc.stop.prevent="cancelEdit(props.row.channel_id, 'dead_time_ns')"
+              @keyup.esc.stop.prevent="cancelEdit(props.row.channel_id, 'dead_time_ns')"
+              @keydown.tab.stop.prevent="handleTabNavigate(props.row.channel_id, 'dead_time_ns', $event)"
             />
             <span
               v-else
@@ -87,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { useRuntimeStore } from "../stores/runtime";
 
 const store = useRuntimeStore();
@@ -95,16 +102,22 @@ const channels = ref([]);
 const editValues = ref({});
 const savingCells = ref({});
 const editingCell = ref("");
+const thresholdRange = ref([-2.0, 2.0]);
+const deadTimeRangeNs = ref([0.0, 1e6]);
 const tableColumns = [
   { name: "channel", label: "Channel", field: "channel", align: "left" },
   { name: "count_rate", label: "Count Rate", field: "count_rate", align: "right" },
-  { name: "threshold", label: "Threshold (V)", field: "threshold", align: "right" },
-  { name: "dead_time", label: "Dead Time (ns)", field: "dead_time", align: "right" },
+  { name: "threshold", label: "Threshold", field: "threshold", align: "right" },
+  { name: "dead_time", label: "Dead Time", field: "dead_time", align: "right" },
 ];
 
 function truncateTo(value, digits) {
   const factor = 10 ** digits;
   return Math.trunc(value * factor) / factor;
+}
+
+function clampToRange(value, low, high) {
+  return Math.min(Math.max(value, low), high);
 }
 
 function pickDefaultDevice(devices) {
@@ -113,13 +126,17 @@ function pickDefaultDevice(devices) {
 }
 
 const selectedDevice = computed(() => store.currentDevice || pickDefaultDevice(store.devices));
+let refreshInterval = null;
 
 function formatCountRate(channel) {
+  if ("count_rate" in channel && Number.isFinite(channel.count_rate)) {
+    return `${Math.round(channel.count_rate)} cps`;
+  }
   if (channel.mode === "Period" && Number.isFinite(channel.period_count)) {
-    return `${channel.period_count} Hz`;
+    return `${channel.period_count} cps`;
   }
   if (channel.mode === "Random" && Number.isFinite(channel.random_count)) {
-    return `${channel.random_count} Hz`;
+    return `${channel.random_count} cps`;
   }
   return "-";
 }
@@ -153,6 +170,37 @@ function cellKey(channelId, field) {
   return `${channelId}:${field}`;
 }
 
+const editableFieldOrder = ["threshold_voltage", "dead_time_ns"];
+
+function getEditableCellSequence() {
+  const sequence = [];
+  for (const row of tableRows.value) {
+    for (const field of editableFieldOrder) {
+      sequence.push(cellKey(row.channel_id, field));
+    }
+  }
+  return sequence;
+}
+
+function findAdjacentEditableCell(currentKey, isBackward) {
+  const sequence = getEditableCellSequence();
+  const index = sequence.indexOf(currentKey);
+  if (index < 0) return "";
+  const nextIndex = isBackward ? index - 1 : index + 1;
+  if (nextIndex < 0 || nextIndex >= sequence.length) return "";
+  return sequence[nextIndex];
+}
+
+async function focusEditableCell(targetKey) {
+  await nextTick();
+  const escaped = window.CSS?.escape ? window.CSS.escape(targetKey) : targetKey.replace(/"/g, '\\"');
+  const input = document.querySelector(`[data-edit-key="${escaped}"] input`);
+  if (input instanceof HTMLInputElement) {
+    input.focus();
+    input.select();
+  }
+}
+
 function isCellSaving(channelId, field) {
   return Boolean(savingCells.value[cellKey(channelId, field)]);
 }
@@ -162,28 +210,51 @@ function beginEdit(channelId, field) {
 }
 
 async function finishEdit(channelId, field) {
+  const key = cellKey(channelId, field);
+  if (editingCell.value !== key) return;
+  editingCell.value = "";
   await saveChannelValue(channelId, field);
-  if (editingCell.value === cellKey(channelId, field)) {
-    editingCell.value = "";
-  }
 }
 
 function cancelEdit(channelId, field) {
+  const key = cellKey(channelId, field);
+  if (editingCell.value !== key) return;
+  editingCell.value = "";
   syncEditValuesFromChannels();
-  if (editingCell.value === cellKey(channelId, field)) {
-    editingCell.value = "";
-  }
+}
+
+async function handleTabNavigate(channelId, field, event) {
+  const currentKey = cellKey(channelId, field);
+  if (editingCell.value !== currentKey) return;
+
+  const targetKey = findAdjacentEditableCell(currentKey, Boolean(event.shiftKey));
+  editingCell.value = "";
+  await saveChannelValue(channelId, field);
+
+  if (!targetKey) return;
+  editingCell.value = targetKey;
+  await focusEditableCell(targetKey);
 }
 
 function syncEditValuesFromChannels() {
   const next = {};
+  let thresholdBounds = thresholdRange.value;
+  let deadTimeBoundsNs = deadTimeRangeNs.value;
   for (const ch of channels.value) {
     next[ch.channel_id] = {
       threshold_voltage: truncateTo(Number(ch.threshold_voltage ?? 0), 3),
       dead_time_ns: Number(((ch.dead_time_s ?? 0) * 1e9).toFixed(3)),
     };
+    if (Array.isArray(ch.threshold_voltage_range) && ch.threshold_voltage_range.length === 2) {
+      thresholdBounds = [Number(ch.threshold_voltage_range[0]), Number(ch.threshold_voltage_range[1])];
+    }
+    if (Array.isArray(ch.dead_time_s_range) && ch.dead_time_s_range.length === 2) {
+      deadTimeBoundsNs = [Number(ch.dead_time_s_range[0]) * 1e9, Number(ch.dead_time_s_range[1]) * 1e9];
+    }
   }
   editValues.value = next;
+  thresholdRange.value = thresholdBounds;
+  deadTimeRangeNs.value = deadTimeBoundsNs;
 }
 
 async function saveChannelValue(channelId, field) {
@@ -200,16 +271,21 @@ async function saveChannelValue(channelId, field) {
       syncEditValuesFromChannels();
       return;
     }
-    const truncatedValue = truncateTo(value, 3);
+    const [low, high] = thresholdRange.value;
+    const clampedValue = clampToRange(value, low, high);
+    const truncatedValue = truncateTo(clampedValue, 3);
     row.threshold_voltage = truncatedValue;
     payload.threshold_voltage = truncatedValue;
   } else if (field === "dead_time_ns") {
     const value = Number(row.dead_time_ns);
-    if (!Number.isFinite(value) || value < 0) {
+    if (!Number.isFinite(value)) {
       syncEditValuesFromChannels();
       return;
     }
-    payload.dead_time_s = value * 1e-9;
+    const [lowNs, highNs] = deadTimeRangeNs.value;
+    const clampedValueNs = clampToRange(value, lowNs, highNs);
+    row.dead_time_ns = clampedValueNs;
+    payload.dead_time_s = clampedValueNs * 1e-9;
   } else {
     return;
   }
@@ -244,20 +320,27 @@ async function saveChannelValue(channelId, field) {
   }
 }
 
+let loadChannelsVersion = 0;
+
 async function loadChannels() {
   if (!selectedDevice.value) {
     channels.value = [];
     return;
   }
+  const device = selectedDevice.value;
+  const version = ++loadChannelsVersion;
   try {
     const result = await store.fetchDeviceChannels(
-      selectedDevice.value.device_type,
-      selectedDevice.value.serial_number
+      device.device_type,
+      device.serial_number
     );
+    if (version !== loadChannelsVersion) return;
     channels.value = result.channels || [];
     syncEditValuesFromChannels();
   } catch (err) {
-    console.error("Failed to load channels:", err);
+    if (version === loadChannelsVersion) {
+      console.error("Failed to load channels:", err);
+    }
   }
 }
 
@@ -274,6 +357,16 @@ onMounted(async () => {
     store.currentDevice = pickDefaultDevice(store.devices);
   }
   await loadChannels();
+  refreshInterval = window.setInterval(() => {
+    loadChannels();
+  }, 1000);
+});
+
+onUnmounted(() => {
+  if (refreshInterval !== null) {
+    window.clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
 });
 </script>
 
@@ -291,18 +384,18 @@ onMounted(async () => {
 }
 
 .config-qtable :deep(.q-table thead th) {
-  padding: 16px 18px;
+  padding: 12px 18px;
   font-size: 13px;
   font-weight: 600;
   color: rgba(0, 0, 0, 0.7);
 }
 
 .config-qtable :deep(.q-table tbody td) {
-  padding: 18px 18px;
+  padding: 14px 18px;
 }
 
 .config-qtable :deep(.q-table tbody tr) {
-  height: 62px;
+  height: 47px;
 }
 
 .config-qtable-b {

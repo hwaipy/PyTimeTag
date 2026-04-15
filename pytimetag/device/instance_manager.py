@@ -15,6 +15,17 @@ from pytimetag.device.manager import device_type_manager
 from pytimetag.device.Simulator import TimeTagSimulator
 from pytimetag.device.SwabianSimulator import SwabianSimulator
 
+DEVICE_LIMITS: Dict[str, Dict[str, Tuple[float, float]]] = {
+    "simulator": {
+        "threshold_voltage": (-5.0, 5.0),
+        "dead_time_s": (10e-9, 200e-9),
+    },
+    "swabian_simulator": {
+        "threshold_voltage": (-2.0, 2.0),
+        "dead_time_s": (5e-9, 500e-9),
+    },
+}
+
 
 class DeviceInstance:
     """Wrapper for a running device instance with its metadata."""
@@ -77,6 +88,15 @@ class DeviceInstanceManager:
         self._instances: Dict[str, DeviceInstance] = {}
         self._lock = threading.RLock()
 
+    def get_channel_limits(self, device_type: str) -> Dict[str, Tuple[float, float]]:
+        return DEVICE_LIMITS.get(
+            device_type,
+            {
+                "threshold_voltage": (-2.0, 2.0),
+                "dead_time_s": (0.0, 1e-3),
+            },
+        )
+
     def list_instances(self) -> List[Dict[str, Any]]:
         """List all running device instances."""
         with self._lock:
@@ -115,8 +135,23 @@ class DeviceInstanceManager:
                 channel_count=channel_count,
             )
             device.serial_number = serial_number
-            for ch_idx in range(device.channel_count):
-                device.set_channel(ch_idx, dead_time_s=10e-9, threshold_voltage=0.8)
+            device.set_channel(
+                0,
+                mode="Period",
+                period_count=5_000,
+                dead_time_s=10e-9,
+                threshold_voltage=-1.0,
+                reference_pulse_v=1.0,
+            )
+            for ch_idx in range(1, device.channel_count):
+                device.set_channel(
+                    ch_idx,
+                    mode="Random",
+                    random_count=50_000,
+                    dead_time_s=10e-9,
+                    threshold_voltage=-1.0,
+                    reference_pulse_v=1.0,
+                )
 
             instance = DeviceInstance(
                 device_type="simulator",
@@ -152,8 +187,23 @@ class DeviceInstanceManager:
                 dataUpdate=data_callback,
                 serial_number=serial_number,
             )
-            for ch_idx in range(device.channel_count):
-                device.set_channel(ch_idx, dead_time_s=5e-9, threshold_voltage=0.5)
+            device.set_channel(
+                0,
+                mode="Period",
+                period_count=5_000,
+                dead_time_s=5e-9,
+                threshold_voltage=-1.0,
+                reference_pulse_v=1.0,
+            )
+            for ch_idx in range(1, device.channel_count):
+                device.set_channel(
+                    ch_idx,
+                    mode="Random",
+                    random_count=50_000,
+                    dead_time_s=5e-9,
+                    threshold_voltage=-1.0,
+                    reference_pulse_v=1.0,
+                )
 
             instance = DeviceInstance(
                 device_type="swabian_simulator",
@@ -207,7 +257,15 @@ class DeviceInstanceManager:
             raise ValueError(f"Device instance '{device_type}:{serial_number}' not found")
 
         device = instance.device
+        limits = self.get_channel_limits(instance.device_type)
         channels = []
+
+        count_rates = []
+        if hasattr(device, "get_channel_count_rates"):
+            try:
+                count_rates = device.get_channel_count_rates()  # type: ignore[attr-defined]
+            except BaseException:
+                pass
 
         for ch_idx in range(device.channel_count):
             ch_info: Dict[str, Any] = {
@@ -243,6 +301,16 @@ class DeviceInstanceManager:
                         "mode": ch_info.get("mode"),
                     })
 
+            ch_info.update(
+                {
+                    "threshold_voltage_range": list(limits["threshold_voltage"]),
+                    "dead_time_s_range": list(limits["dead_time_s"]),
+                }
+            )
+
+            if isinstance(count_rates, (list, tuple)) and ch_idx < len(count_rates):
+                ch_info["count_rate"] = float(count_rates[ch_idx])
+
             channels.append(ch_info)
 
         return channels
@@ -276,6 +344,18 @@ class DeviceInstanceManager:
 
         if channel_id < 0 or channel_id >= device.channel_count:
             raise ValueError(f"Channel {channel_id} out of range (0-{device.channel_count-1})")
+
+        limits = self.get_channel_limits(instance.device_type)
+        if "dead_time_s" in config:
+            dead_time_s = float(config["dead_time_s"])
+            low, high = limits["dead_time_s"]
+            if dead_time_s < low or dead_time_s > high:
+                raise ValueError(f"dead_time_s out of range [{low}, {high}]")
+        if "threshold_voltage" in config:
+            threshold_voltage = float(config["threshold_voltage"])
+            low, high = limits["threshold_voltage"]
+            if threshold_voltage < low or threshold_voltage > high:
+                raise ValueError(f"threshold_voltage out of range [{low}, {high}]")
 
         # Handle simulator-specific settings (both Simulator and SwabianSimulator)
         if isinstance(device, (TimeTagSimulator, SwabianSimulator)):

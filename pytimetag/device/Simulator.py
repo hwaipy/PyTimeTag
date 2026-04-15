@@ -195,6 +195,7 @@ class TimeTagSimulator(TimeTagDevice):
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
+        self._channel_count_rates: List[float] = [0.0] * self._channel_count
 
     @property
     def channel_count(self) -> int:
@@ -235,6 +236,11 @@ class TimeTagSimulator(TimeTagDevice):
             "period_count": ch.period_count,
             "random_count": ch.random_count,
         }
+
+    def get_channel_count_rates(self) -> List[float]:
+        if not self.is_running():
+            return [0.0] * self._channel_count
+        return list(self._channel_count_rates)
 
     def start(self) -> None:
         """Start background thread that invokes ``dataUpdate`` at configured intervals."""
@@ -449,6 +455,9 @@ class TimeTagSimulator(TimeTagDevice):
         t1 = t0 + span_ticks
         content = self._synthesize_content(t0, t1)
         self._cursor = t1
+        dt_s = span_ticks * self.resolution
+        for ch_idx, ts in enumerate(content):
+            self._channel_count_rates[ch_idx] = int(ts.size / dt_s) if dt_s > 0 else 0
         arr = self._content_to_packed_stream(content)
         self._dataUpdate(arr)
 

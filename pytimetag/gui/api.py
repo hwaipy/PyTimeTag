@@ -262,7 +262,9 @@ def create_app(config: GuiConfig) -> FastAPI:
                 "config": config,
             }
         except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            detail = str(exc)
+            status = 404 if "not found" in detail.lower() else 400
+            raise HTTPException(status_code=status, detail=detail) from exc
 
     @app.get("/api/v1/analyzers")
     async def get_analyzers() -> Dict[str, Any]:
