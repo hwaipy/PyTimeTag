@@ -264,6 +264,20 @@ class SwabianTimeTag(TimeTagDevice):
     def set_trigger_level(self, channel: int, trigger_level_v: float) -> None:
         self.set_channel(channel, threshold_voltage=trigger_level_v)
 
+    def is_running(self) -> bool:
+        t = self._thread
+        return bool(t is not None and t.is_alive())
+
+    def get_channel_settings(self, channel: int) -> Dict[str, Any]:
+        self._channel_to_hw(channel)
+        st = self._settings[channel]
+        return {
+            "dead_time_s": st.dead_time_s,
+            "threshold_voltage": st.threshold_voltage,
+            "enabled": st.enabled,
+            "mode": None,
+        }
+
     def start(self) -> None:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():

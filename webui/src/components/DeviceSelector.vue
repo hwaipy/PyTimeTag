@@ -1,46 +1,71 @@
 <template>
-  <div class="device-selector" ref="selectorRef">
+  <div class="device-selector">
+    <div class="device-selector-main" ref="selectorRef">
+      <button
+        class="device-selector-trigger"
+        :class="{ open: isOpen }"
+        @click="toggleDropdown"
+      >
+        <div class="device-info">
+          <span class="device-name">{{ displayName }}</span>
+          <span class="device-serial">{{ displaySerial }}</span>
+        </div>
+        <svg
+          class="chevron"
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          :style="{ transform: isOpen ? 'rotate(180deg)' : '' }"
+        >
+          <path d="M7 10l5 5 5-5z"/>
+        </svg>
+      </button>
+
+      <transition name="dropdown">
+        <div v-if="isOpen" class="device-dropdown-menu">
+          <div
+            v-for="device in store.devices"
+            :key="device.unique_id"
+            class="device-dropdown-item"
+            :class="{ active: isCurrent(device) }"
+            @click="selectDevice(device)"
+          >
+            <div class="device-item-info">
+              <span class="device-item-name">{{ device.manufacturer || device.device_type }}</span>
+              <span class="device-item-serial">{{ device.serial_number }}</span>
+            </div>
+            <span v-if="device.running" class="device-status-dot"></span>
+          </div>
+          <div v-if="store.devices.length === 0" class="device-dropdown-empty">
+            No devices available
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <button
-      class="device-selector-trigger"
-      :class="{ open: isOpen }"
-      @click="toggleDropdown"
+      class="device-run-toggle"
+      :class="{
+        running: currentDevice?.running && !isSwitching,
+        idle: !currentDevice?.running && !isSwitching,
+      }"
+      :disabled="!currentDevice || isSwitching"
+      :title="isSwitching ? 'Switching device state...' : (currentDevice?.running ? 'Stop device' : 'Start device')"
+      @click="toggleRunning"
     >
-      <div class="device-info">
-        <span class="device-name">{{ displayName }}</span>
-        <span class="device-serial">{{ displaySerial }}</span>
-      </div>
+      <span v-if="isSwitching" class="run-spinner"></span>
       <svg
-        class="chevron"
-        width="10"
-        height="10"
+        v-else
+        class="run-arrow"
+        width="14"
+        height="14"
         viewBox="0 0 24 24"
         fill="currentColor"
-        :style="{ transform: isOpen ? 'rotate(180deg)' : '' }"
       >
-        <path d="M7 10l5 5 5-5z"/>
+        <path d="M8 5v14l11-7z"/>
       </svg>
     </button>
-
-    <transition name="dropdown">
-      <div v-if="isOpen" class="device-dropdown-menu">
-        <div
-          v-for="device in store.devices"
-          :key="device.unique_id"
-          class="device-dropdown-item"
-          :class="{ active: isCurrent(device) }"
-          @click="selectDevice(device)"
-        >
-          <div class="device-item-info">
-            <span class="device-item-name">{{ device.manufacturer || device.device_type }}</span>
-            <span class="device-item-serial">{{ device.serial_number }}</span>
-          </div>
-          <span v-if="device.running" class="device-status-dot"></span>
-        </div>
-        <div v-if="store.devices.length === 0" class="device-dropdown-empty">
-          No devices available
-        </div>
-      </div>
-    </transition>
   </div>
 </template>
 
@@ -51,6 +76,7 @@ import { useRuntimeStore } from "../stores/runtime";
 const store = useRuntimeStore();
 const isOpen = ref(false);
 const selectorRef = ref(null);
+const isSwitching = ref(false);
 
 function pickDefaultDevice(devices) {
   if (!Array.isArray(devices) || devices.length === 0) return null;
@@ -72,6 +98,7 @@ const displaySerial = computed(() => {
   }
   return "";
 });
+const currentDevice = computed(() => store.currentDevice || pickDefaultDevice(store.devices));
 
 function isCurrent(device) {
   const current = store.currentDevice || pickDefaultDevice(store.devices);
@@ -86,6 +113,28 @@ function toggleDropdown() {
 function selectDevice(device) {
   store.currentDevice = device;
   isOpen.value = false;
+}
+
+async function toggleRunning(event) {
+  event.stopPropagation();
+  const current = currentDevice.value;
+  if (!current || isSwitching.value) return;
+
+  isSwitching.value = true;
+  const currentId = current.unique_id;
+  try {
+    if (current.running) {
+      await store.stopDevice(current.device_type, current.serial_number);
+    } else {
+      await store.startDevice(current.device_type, current.serial_number);
+    }
+    const refreshed = store.devices.find((device) => device.unique_id === currentId);
+    store.currentDevice = refreshed || pickDefaultDevice(store.devices);
+  } catch (err) {
+    alert(err.message || "Failed to switch device state");
+  } finally {
+    isSwitching.value = false;
+  }
 }
 
 function handleClickOutside(event) {
@@ -112,6 +161,12 @@ onUnmounted(() => {
 
 <style scoped>
 .device-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.device-selector-main {
   position: relative;
 }
 
@@ -184,6 +239,19 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.device-dropdown-menu::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 22px;
+  width: 14px;
+  height: 14px;
+  background-color: rgba(39, 39, 41, 0.95);
+  transform: rotate(45deg);
+  border-radius: 2px;
+  z-index: -1;
+}
+
 .device-dropdown-item {
   display: flex;
   align-items: center;
@@ -242,6 +310,70 @@ onUnmounted(() => {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.device-run-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(76, 175, 80, 0.45);
+  background: rgba(76, 175, 80, 0.1);
+  color: #66d96e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.device-run-toggle:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.16);
+  border-color: rgba(76, 175, 80, 0.7);
+}
+
+.device-run-toggle:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.device-run-toggle.running {
+  background: rgba(76, 175, 80, 0.24);
+  box-shadow: 0 0 12px rgba(76, 175, 80, 0.5), 0 0 22px rgba(76, 175, 80, 0.28);
+  animation: running-glow 1.6s ease-in-out infinite;
+}
+
+.run-arrow {
+  transform: translateX(0.5px);
+}
+
+.device-run-toggle.running .run-arrow {
+  filter: drop-shadow(0 0 6px rgba(102, 217, 110, 0.75));
+}
+
+.run-spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(102, 217, 110, 0.28);
+  border-top-color: #66d96e;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes running-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.42), 0 0 20px rgba(76, 175, 80, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(76, 175, 80, 0.62), 0 0 30px rgba(76, 175, 80, 0.34);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Dropdown animation */

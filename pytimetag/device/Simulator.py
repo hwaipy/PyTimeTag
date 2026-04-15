@@ -221,6 +221,21 @@ class TimeTagSimulator(TimeTagDevice):
     def set_trigger_level(self, channel: int, trigger_level_v: float) -> None:
         self.set_channel(channel, threshold_voltage=trigger_level_v)
 
+    def is_running(self) -> bool:
+        t = self._thread
+        return bool(t is not None and t.is_alive())
+
+    def get_channel_settings(self, channel: int) -> dict:
+        ch = self.channel(channel)
+        return {
+            "dead_time_s": ch.dead_time_s,
+            "threshold_voltage": ch.threshold_voltage,
+            "enabled": ch.enabled,
+            "mode": ch.mode,
+            "period_count": ch.period_count,
+            "random_count": ch.random_count,
+        }
+
     def start(self) -> None:
         """Start background thread that invokes ``dataUpdate`` at configured intervals."""
         with self._lock:

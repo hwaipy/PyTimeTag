@@ -210,7 +210,6 @@ export const useRuntimeStore = defineStore("runtime", {
       const res = await this._request(`${API_BASE}/devices`);
       const data = await res.json();
       this.devices = data.items || [];
-      console.log("[PyTimeTag] devices fetched:", this.devices);
       return this.devices;
     },
     async startDevice(deviceType, serialNumber) {

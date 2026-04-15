@@ -48,6 +48,13 @@ class DeviceInstance:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize instance metadata (not the device itself)."""
+        running = False
+        checker = getattr(self.device, "is_running", None)
+        if callable(checker):
+            try:
+                running = bool(checker())
+            except BaseException:
+                running = False
         return {
             "device_type": self.device_type,
             "manufacturer": self.manufacturer,
@@ -56,6 +63,7 @@ class DeviceInstance:
             "unique_id": self.unique_id,
             "channel_count": self.device.channel_count,
             "resolution": self.device.resolution,
+            "running": running,
         }
 
 
@@ -107,6 +115,8 @@ class DeviceInstanceManager:
                 channel_count=channel_count,
             )
             device.serial_number = serial_number
+            for ch_idx in range(device.channel_count):
+                device.set_channel(ch_idx, dead_time_s=10e-9, threshold_voltage=0.8)
 
             instance = DeviceInstance(
                 device_type="simulator",
@@ -142,6 +152,8 @@ class DeviceInstanceManager:
                 dataUpdate=data_callback,
                 serial_number=serial_number,
             )
+            for ch_idx in range(device.channel_count):
+                device.set_channel(ch_idx, dead_time_s=5e-9, threshold_voltage=0.5)
 
             instance = DeviceInstance(
                 device_type="swabian_simulator",
@@ -202,25 +214,34 @@ class DeviceInstanceManager:
                 "channel_id": ch_idx,
             }
 
-            # Try to get simulator-specific channel settings (both Simulator and SwabianSimulator)
-            if isinstance(device, (TimeTagSimulator, SwabianSimulator)):
-                ch = device.channel(ch_idx)
-                ch_info.update({
-                    "dead_time_s": ch.dead_time_s,
-                    "threshold_voltage": ch.threshold_voltage,
-                    "enabled": ch.enabled,
-                    "mode": ch.mode,
-                    "period_count": ch.period_count,
-                    "random_count": ch.random_count,
-                })
-            else:
-                # For other devices, use defaults or query the device
-                ch_info.update({
-                    "dead_time_s": 0.0,
-                    "threshold_voltage": 0.0,
-                    "enabled": True,
-                    "mode": None,
-                })
+            # Prefer querying settings from device implementation directly.
+            if hasattr(device, "get_channel_settings"):
+                try:
+                    settings = device.get_channel_settings(ch_idx)  # type: ignore[attr-defined]
+                    if isinstance(settings, dict):
+                        ch_info.update(settings)
+                except BaseException:
+                    pass
+
+            # Backward compatibility for simulator-style implementations.
+            if "dead_time_s" not in ch_info or "threshold_voltage" not in ch_info:
+                if isinstance(device, (TimeTagSimulator, SwabianSimulator)):
+                    ch = device.channel(ch_idx)
+                    ch_info.update({
+                        "dead_time_s": ch.dead_time_s,
+                        "threshold_voltage": ch.threshold_voltage,
+                        "enabled": ch.enabled,
+                        "mode": ch.mode,
+                        "period_count": ch.period_count,
+                        "random_count": ch.random_count,
+                    })
+                else:
+                    ch_info.update({
+                        "dead_time_s": ch_info.get("dead_time_s", 0.0),
+                        "threshold_voltage": ch_info.get("threshold_voltage", 0.0),
+                        "enabled": ch_info.get("enabled", True),
+                        "mode": ch_info.get("mode"),
+                    })
 
             channels.append(ch_info)
 
