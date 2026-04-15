@@ -377,11 +377,13 @@ class SimulatorTest(unittest.TestCase):
         )
         sim.set_channel(0, mode='Period', period_count=period_hz, threshold_voltage=-1.0, reference_pulse_v=1.0)
         sim.set_channel(1, mode='Random', random_count=random_hz, threshold_voltage=-1.0, reference_pulse_v=1.0)
+        # Pulse parameters are per-second rates; with ~65 ms average batch,
+        # 1000 events/s ≈ 65 events/batch, close to the original per-batch 60.
         sim.set_channel(
             2,
             mode='Pulse',
-            pulse_count=200,
-            pulse_events=60,
+            pulse_count=10000,
+            pulse_events=1000,
             pulse_sigma_s=100e-12,
             threshold_voltage=-1.0,
             reference_pulse_v=1.0,
@@ -455,8 +457,9 @@ class SimulatorTest(unittest.TestCase):
         self.assertLess(chi2, 35.0, 'histogram should be roughly uniform (chi-square on bins)')
 
         tc2 = db.content[2]
-        self.assertGreater(tc2.size, int(0.7 * 60 * n_batches))
-        self.assertLess(tc2.size, int(1.3 * 60 * n_batches))
+        # ~65 events/batch with 1000 events/s and 50-80 ms batches
+        self.assertGreater(tc2.size, int(0.6 * 65 * n_batches))
+        self.assertLess(tc2.size, int(1.4 * 65 * n_batches))
 
 if __name__ == '__main__':
     unittest.main()
