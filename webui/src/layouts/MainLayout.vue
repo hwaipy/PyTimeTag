@@ -89,7 +89,7 @@ import DeviceSelector from "../components/DeviceSelector.vue";
 const route = useRoute();
 
 const navItems = [
-  { path: "/", label: "Devices" },
+  { path: "/", label: "Config" },
   { path: "/dashboard", label: "Dashboard" },
   { path: "/offline", label: "Offline" },
   { path: "/storage", label: "Storage" },
