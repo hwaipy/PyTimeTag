@@ -8,14 +8,13 @@ global.fetch = vi.fn()
 describe('Runtime Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    fetch.mockClear()
+    fetch.mockReset()
   })
 
   describe('Session API', () => {
     it('should fetch session status', async () => {
       const mockResponse = {
         running: false,
-        source: 'simulator',
         blocks: 0,
         events_total: 0,
       }
@@ -29,70 +28,6 @@ describe('Runtime Store', () => {
 
       expect(fetch).toHaveBeenCalledWith('/api/v1/session/status', undefined)
       expect(store.session).toEqual(mockResponse)
-    })
-
-    it('should start session', async () => {
-      const startResponse = {
-        running: true,
-        source: 'simulator',
-        blocks: 0,
-      }
-      const statusResponse = {
-        running: true,
-        source: 'simulator',
-        blocks: 0,
-        events_total: 0,
-      }
-      fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => startResponse,
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => statusResponse,
-        })
-
-      const store = useRuntimeStore()
-      await store.startSession()
-
-      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/session/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'simulator' }),
-      })
-      expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/session/status', undefined)
-      expect(store.session).toEqual(statusResponse)
-    })
-
-    it('should stop session', async () => {
-      const stopResponse = {
-        running: false,
-        source: 'simulator',
-        blocks: 1,
-      }
-      const statusResponse = {
-        running: false,
-        source: 'simulator',
-        blocks: 1,
-        events_total: 100,
-      }
-      fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => stopResponse,
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => statusResponse,
-        })
-
-      const store = useRuntimeStore()
-      await store.stopSession()
-
-      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/session/stop', { method: 'POST' })
-      expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/session/status', undefined)
-      expect(store.session).toEqual(statusResponse)
     })
 
     it('should throw on error response', async () => {
@@ -419,12 +354,13 @@ describe('Runtime Store', () => {
     })
   })
 
-  describe('Device Instance Management APIs', () => {
-    it('should fetch devices', async () => {
+  describe('Current Device API', () => {
+    it('should fetch current device', async () => {
       const mockResponse = {
-        items: [
-          { device_type: 'simulator', serial_number: 'SIM-001', channel_count: 16 },
-        ],
+        device_type: 'simulator',
+        serial_number: 'simulator',
+        channel_count: 16,
+        running: true,
       }
       fetch.mockResolvedValueOnce({
         ok: true,
@@ -434,53 +370,16 @@ describe('Runtime Store', () => {
       const store = useRuntimeStore()
       const result = await store.fetchDevices()
 
-      expect(fetch).toHaveBeenCalledWith('/api/v1/devices', undefined)
-      expect(store.devices).toEqual(mockResponse.items)
-      expect(result).toEqual(mockResponse.items)
-    })
-
-    it('should start a device', async () => {
-      fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ started: true }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ items: [] }),
-        })
-
-      const store = useRuntimeStore()
-      await store.startDevice('simulator', 'SIM-001')
-
-      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices/simulator/SIM-001/start', {
-        method: 'POST',
-      })
-    })
-
-    it('should stop a device', async () => {
-      fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ stopped: true }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ items: [] }),
-        })
-
-      const store = useRuntimeStore()
-      await store.stopDevice('simulator', 'SIM-001')
-
-      expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/devices/simulator/SIM-001/stop', {
-        method: 'POST',
-      })
+      expect(fetch).toHaveBeenCalledWith('/api/v1/device/current', undefined)
+      expect(store.devices).toEqual([mockResponse])
+      expect(store.currentDevice).toEqual(mockResponse)
+      expect(result).toEqual([mockResponse])
     })
 
     it('should fetch device channels', async () => {
       const mockResponse = {
         device_type: 'simulator',
-        serial_number: 'SIM-001',
+        serial_number: 'simulator',
         channels: [
           {
             channel_id: 0,
@@ -497,10 +396,10 @@ describe('Runtime Store', () => {
       })
 
       const store = useRuntimeStore()
-      const result = await store.fetchDeviceChannels('simulator', 'SIM-001')
+      const result = await store.fetchDeviceChannels('simulator', 'simulator')
 
       expect(fetch).toHaveBeenCalledWith(
-        '/api/v1/devices/simulator/SIM-001/channels',
+        '/api/v1/devices/simulator/simulator/channels',
         undefined
       )
       expect(result.channels[0].channel_id).toBe(0)
@@ -511,7 +410,7 @@ describe('Runtime Store', () => {
       const mockResponse = {
         updated: true,
         device_type: 'simulator',
-        serial_number: 'SIM-001',
+        serial_number: 'simulator',
         channel_id: 0,
         config: { dead_time_s: 0.000002, threshold_voltage: -0.3 },
       }
@@ -521,13 +420,13 @@ describe('Runtime Store', () => {
       })
 
       const store = useRuntimeStore()
-      const result = await store.updateDeviceChannel('simulator', 'SIM-001', 0, {
+      const result = await store.updateDeviceChannel('simulator', 'simulator', 0, {
         dead_time_s: 0.000002,
         threshold_voltage: -0.3,
       })
 
       expect(fetch).toHaveBeenCalledWith(
-        '/api/v1/devices/simulator/SIM-001/channels/0',
+        '/api/v1/devices/simulator/simulator/channels/0',
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },

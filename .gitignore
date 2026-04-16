@@ -159,3 +159,5 @@ webui_dist/
 store_test
 
 .claude
+*.duckdb
+*.duckdb.wal

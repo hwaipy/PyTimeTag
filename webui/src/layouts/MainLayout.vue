@@ -90,6 +90,7 @@ const route = useRoute();
 
 const navItems = [
   { path: "/", label: "Config" },
+  { path: "/traces", label: "Traces" },
   { path: "/dashboard", label: "Dashboard" },
   { path: "/offline", label: "Offline" },
   { path: "/storage", label: "Storage" },

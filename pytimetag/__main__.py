@@ -26,6 +26,7 @@ from pytimetag.device.datablock_packer import (
     SplitByTimeWindow,
 )
 from pytimetag.device.source_registry import list_cli_hardware_sources
+from pytimetag.gui.config import StreamPathConfig
 
 
 def _parse_channel_settings(items: List[str], channel_count: int) -> Dict[int, Dict[str, object]]:
@@ -182,12 +183,36 @@ def main() -> None:
             action="store_true",
             help="Disable serving bundled frontend; use Node dev server instead.",
         )
+        gui_parser.add_argument(
+            "--path",
+            action="append",
+            default=[],
+            help="Stream path config (repeatable). Format: NAME:DB_PATH:RAW_DIR. Example: --path main:./store/main.duckdb:./store",
+        )
+        gui_parser.add_argument("--device", default="simulator", choices=["simulator"], help="Device type (default: %(default)s)")
+        gui_parser.add_argument("--serial", default="simulator", help="Device serial number (default: %(default)s)")
+        gui_parser.add_argument("--channel-count", type=int, default=16, help="Device channel count (default: %(default)s)")
+        gui_parser.add_argument("--split-mode", choices=["time", "channel"], default="time", help="DataBlock split mode (default: %(default)s)")
+        gui_parser.add_argument("--split-s", type=float, default=1.0, help="Split window in seconds for time mode (default: %(default)s)")
+        gui_parser.add_argument("--split-channel", type=int, default=0, help="Trigger channel for channel mode (default: %(default)s)")
         gui_args = gui_parser.parse_args(sys.argv[2:])
+
+        stream_paths: List[StreamPathConfig] = []
+        for raw in gui_args.path:
+            parts = raw.split(":")
+            if len(parts) < 3:
+                raise ValueError(f"Invalid --path format: {raw!r}. Expected NAME:DB_PATH:RAW_DIR")
+            name = parts[0].strip()
+            db_path = parts[1].strip()
+            raw_dir = ":".join(parts[2:]).strip()
+            stream_paths.append(StreamPathConfig(name=name, storage_db=db_path, datablock_dir=raw_dir))
+
         run_gui_server(
             host=gui_args.host,
             port=gui_args.port,
             reload=gui_args.reload,
             serve_web=not gui_args.no_web,
+            stream_paths=stream_paths or None,
         )
         return
 

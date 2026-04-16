@@ -20,10 +20,7 @@ from pytimetag.gui.config import GuiConfig
 from pytimetag.gui.acquisition import AcquisitionService
 from pytimetag.device.source_registry import list_cli_hardware_sources
 from pytimetag.device.instance_manager import instance_manager
-
-
-class StartSessionRequest(BaseModel):
-    source: str = "simulator"
+from pytimetag.device.datablock_packer import SplitByChannelEvent, SplitByTimeWindow
 
 
 class OfflineProcessRequest(BaseModel):
@@ -50,15 +47,6 @@ class ChannelConfigRequest(BaseModel):
     pulse_events: Optional[int] = None
     pulse_sigma_s: Optional[float] = None
     reference_pulse_v: Optional[float] = None
-
-
-class StorageQueryRequest(BaseModel):
-    limit: int = 100
-    offset: int = 0
-    order_by: str = "FetchTime"
-    order_desc: bool = True
-    after: Optional[str] = None
-    filter: Optional[Dict[str, Any]] = None
 
 
 class WsHub:
@@ -124,9 +112,14 @@ def create_app(config: GuiConfig) -> FastAPI:
     hub_metrics = WsHub()
     hub_logs = WsHub()
 
-    config.storage_db_path.parent.mkdir(parents=True, exist_ok=True)
-    config.datablock_dir_path.mkdir(parents=True, exist_ok=True)
-    conn = duckdb.connect(str(config.storage_db_path))
+    stream_paths = config.resolved_stream_paths()
+    for cfg in stream_paths:
+        Path(cfg.datablock_dir).resolve().mkdir(parents=True, exist_ok=True)
+
+    # Use the first path's DB for GUI metadata tables.
+    gui_db_path = Path(stream_paths[0].storage_db).resolve()
+    gui_db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = duckdb.connect(str(gui_db_path))
     _init_gui_tables(conn)
     log_buffer: deque[Dict[str, Any]] = deque(maxlen=300)
 
@@ -134,27 +127,50 @@ def create_app(config: GuiConfig) -> FastAPI:
         log_buffer.append({"type": "log", "level": level, "message": message, "ts": _now()})
 
     celery = create_celery_app(config)
+
+    # Determine split configuration.
+    if config.split_mode == "time":
+        window_ticks = int(round(config.split_s / 1e-12))
+        if window_ticks <= 0:
+            window_ticks = 1
+        split_cfg: Any = SplitByTimeWindow(window_ticks)
+    else:
+        if config.split_channel < 0 or config.split_channel >= 16:
+            raise ValueError("--split-channel must be in 0..15")
+        split_cfg = SplitByChannelEvent(config.split_channel)
+
+    resolution = 1e-12
     acquisition = AcquisitionService(
-        storage_db=config.storage_db_path,
-        datablock_dir=config.datablock_dir_path,
+        stream_paths=stream_paths,
+        channel_count=config.device_channel_count,
+        resolution=resolution,
+        split=split_cfg,
         metrics_cb=lambda m: None,
         log_cb=append_log,
+        save_raw_data=config.save_raw_data,
     )
-    append_log("info", "GUI API initialized")
 
-    # Register default device instances for the web UI on startup.
-    try:
-        instance_manager.create_simulator(serial_number="simulator", channel_count=16)
-        append_log("info", "Default simulator device registered: simulator:simulator")
-    except ValueError:
-        # Another worker/process may have created it already.
-        pass
-    try:
-        instance_manager.create_swabian_simulator(serial_number="Simulator")
-        append_log("info", "Default simulator device registered: swabian_simulator:Simulator")
-    except ValueError:
-        # Another worker/process may have created it already.
-        pass
+    # Create the single device instance via instance_manager.
+    # Pass acquisition's word callback so the service receives the raw stream.
+    if config.device_type == "simulator":
+        try:
+            instance_manager.create_simulator(
+                serial_number=config.device_serial,
+                channel_count=config.device_channel_count,
+                data_callback=acquisition._on_words,
+            )
+        except ValueError:
+            pass  # already exists
+    else:
+        raise ValueError(f"Unsupported GUI device type: {config.device_type}")
+
+    device_instance = instance_manager.get_instance(config.device_type, config.device_serial)
+    if device_instance is None:
+        raise RuntimeError(f"Failed to initialize device {config.device_type}:{config.device_serial}")
+
+    acquisition.start()
+    instance_manager.start_instance(config.device_type, config.device_serial)
+    append_log("info", "GUI API initialized")
 
     def read_settings() -> Dict[str, Any]:
         rows = conn.execute("SELECT key, value_json FROM GUISettings").fetchall()
@@ -169,7 +185,7 @@ def create_app(config: GuiConfig) -> FastAPI:
             "name": "pytimetag-gui",
             "api_version": "v1",
             "features": {
-                "session_control": True,
+                "session_control": False,
                 "offline_processing": True,
                 "datablock_listing": True,
                 "realtime_metrics_ws": True,
@@ -183,64 +199,35 @@ def create_app(config: GuiConfig) -> FastAPI:
     async def session_status() -> Dict[str, Any]:
         return acquisition.snapshot_metrics()
 
-    @app.post("/api/v1/session/start")
-    async def session_start(body: StartSessionRequest) -> Dict[str, Any]:
-        if body.source != "simulator":
-            raise HTTPException(status_code=400, detail="Current GUI build supports simulator source only.")
-        acquisition.start(body.source)
-        await hub_logs.broadcast_json({"type": "log", "level": "info", "message": f"Session started ({body.source})"})
-        return acquisition.snapshot_metrics()
-
-    @app.post("/api/v1/session/stop")
-    async def session_stop() -> Dict[str, Any]:
-        acquisition.stop()
-        await hub_logs.broadcast_json({"type": "log", "level": "info", "message": "Session stopped"})
-        return acquisition.snapshot_metrics()
-
     @app.get("/api/v1/sources")
     async def list_sources() -> Dict[str, Any]:
         return {"items": ["simulator"] + list_cli_hardware_sources()}
 
-    # Device Instance Management APIs
-    @app.get("/api/v1/devices")
-    async def list_devices() -> Dict[str, Any]:
-        """List all running device instances."""
-        return {"items": instance_manager.list_instances()}
+    @app.get("/api/v1/device/current")
+    async def get_current_device() -> Dict[str, Any]:
+        inst = instance_manager.get_instance(config.device_type, config.device_serial)
+        if inst is None:
+            raise HTTPException(status_code=404, detail="No active device")
+        return inst.to_dict()
 
-    @app.post("/api/v1/devices/{device_type}/{serial_number}/start")
-    async def start_device(device_type: str, serial_number: str) -> Dict[str, Any]:
-        """Start a device instance."""
-        try:
-            instance_manager.start_instance(device_type, serial_number)
-            append_log("info", f"Device started: {device_type}:{serial_number}")
-            await hub_logs.broadcast_json(
-                {"type": "log", "level": "info", "message": f"Device started: {device_type}:{serial_number}"}
-            )
-            return {"started": True, "device_type": device_type, "serial_number": serial_number}
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    @app.post("/api/v1/devices/{device_type}/{serial_number}/stop")
-    async def stop_device(device_type: str, serial_number: str) -> Dict[str, Any]:
-        """Stop a device instance."""
-        try:
-            instance_manager.stop_instance(device_type, serial_number)
-            append_log("info", f"Device stopped: {device_type}:{serial_number}")
-            await hub_logs.broadcast_json(
-                {"type": "log", "level": "info", "message": f"Device stopped: {device_type}:{serial_number}"}
-            )
-            return {"stopped": True, "device_type": device_type, "serial_number": serial_number}
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    @app.get("/api/v1/stream_paths")
+    async def get_stream_paths() -> Dict[str, Any]:
+        return {
+            "items": [
+                {"name": cfg.name, "storage_db": cfg.storage_db, "datablock_dir": cfg.datablock_dir}
+                for cfg in stream_paths
+            ]
+        }
+        return inst.to_dict()
 
     @app.get("/api/v1/devices/{device_type}/{serial_number}/channels")
     async def get_device_channels(device_type: str, serial_number: str) -> Dict[str, Any]:
-        """Get channel information for a device instance."""
+        """Get channel information for the active device instance."""
         try:
-            channels = instance_manager.get_channel_info(device_type, serial_number)
+            channels = instance_manager.get_channel_info(config.device_type, config.device_serial)
             return {
-                "device_type": device_type,
-                "serial_number": serial_number,
+                "device_type": config.device_type,
+                "serial_number": config.device_serial,
                 "channels": channels,
             }
         except ValueError as exc:
@@ -253,17 +240,17 @@ def create_app(config: GuiConfig) -> FastAPI:
         channel_id: int,
         body: ChannelConfigRequest,
     ) -> Dict[str, Any]:
-        """Set channel configuration for a device instance."""
+        """Set channel configuration for the active device instance."""
         try:
-            config = body.dict(exclude_unset=True)
-            instance_manager.set_channel_config(device_type, serial_number, channel_id, config)
-            append_log("info", f"Channel {channel_id} updated for {device_type}:{serial_number}")
+            cfg = body.dict(exclude_unset=True)
+            instance_manager.set_channel_config(config.device_type, config.device_serial, channel_id, cfg)
+            append_log("info", f"Channel {channel_id} updated for {config.device_type}:{config.device_serial}")
             return {
                 "updated": True,
-                "device_type": device_type,
-                "serial_number": serial_number,
+                "device_type": config.device_type,
+                "serial_number": config.device_serial,
                 "channel_id": channel_id,
-                "config": config,
+                "config": cfg,
             }
         except ValueError as exc:
             detail = str(exc)
@@ -302,8 +289,13 @@ def create_app(config: GuiConfig) -> FastAPI:
 
     @app.get("/api/v1/datablocks")
     async def list_datablocks(limit: int = 100) -> Dict[str, Any]:
-        base = config.datablock_dir_path
-        candidates = sorted(base.rglob("*.datablock"), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
+        # Aggregate datablocks across all paths.
+        candidates: List[Path] = []
+        for cfg in stream_paths:
+            base = Path(cfg.datablock_dir).resolve()
+            if base.exists():
+                candidates.extend(base.rglob("*.datablock"))
+        candidates = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
         return {
             "items": [
                 {
@@ -390,30 +382,17 @@ def create_app(config: GuiConfig) -> FastAPI:
         rows = list(log_buffer)
         return {"items": rows[-int(limit):]}
 
-    web_dist = Path(__file__).resolve().parent / "webui_dist"
-    if config.serve_web and web_dist.exists():
-        app.mount("/assets", StaticFiles(directory=str(web_dist / "assets")), name="assets")
-
-        @app.get("/")
-        async def web_index() -> FileResponse:
-            return FileResponse(web_dist / "index.html")
-
-        @app.get("/{full_path:path}")
-        async def web_fallback(full_path: str) -> FileResponse:
-            _ = full_path
-            return FileResponse(web_dist / "index.html")
-
     # Storage API - unified style: /storage/{collection}/{function}/{arg}
     @app.get("/api/v1/storage/collections")
-    async def storage_list_collections() -> Dict[str, Any]:
-        storage = acquisition._storage
+    async def storage_list_collections(path: Optional[str] = None) -> Dict[str, Any]:
+        storage = acquisition.get_storage(path)
         if storage.existCollections is None:
             await storage._Storage__senseExistCollections()
         return {"items": list(storage.existCollections) if storage.existCollections else []}
 
     @app.post("/api/v1/storage/{collection}/append")
-    async def storage_append(collection: str, body: Dict[str, Any]) -> Dict[str, Any]:
-        storage = acquisition._storage
+    async def storage_append(collection: str, body: Dict[str, Any], path: Optional[str] = None) -> Dict[str, Any]:
+        storage = acquisition.get_storage(path)
         data = body.get("data", {})
         fetch_time = body.get("fetchTime")
         try:
@@ -429,8 +408,9 @@ def create_app(config: GuiConfig) -> FastAPI:
         offset: int = 0,
         by: str = "FetchTime",
         after: Optional[str] = None,
+        path: Optional[str] = None,
     ) -> Dict[str, Any]:
-        storage = acquisition._storage
+        storage = acquisition.get_storage(path)
         try:
             items = await storage.latest(collection, by=by, after=after, length=limit + offset)
             if items is None:
@@ -447,8 +427,9 @@ def create_app(config: GuiConfig) -> FastAPI:
         collection: str,
         by: str = "FetchTime",
         after: Optional[str] = None,
+        path: Optional[str] = None,
     ) -> Dict[str, Any]:
-        storage = acquisition._storage
+        storage = acquisition.get_storage(path)
         try:
             result = await storage.first(collection, by=by, after=after, length=1)
             if result is None:
@@ -466,8 +447,9 @@ def create_app(config: GuiConfig) -> FastAPI:
         end: str,
         by: str = "FetchTime",
         limit: int = 1000,
+        path: Optional[str] = None,
     ) -> Dict[str, Any]:
-        storage = acquisition._storage
+        storage = acquisition.get_storage(path)
         try:
             items = await storage.range(collection, begin=begin, end=end, by=by, limit=limit)
             return {"items": items, "collection": collection, "limit": limit}
@@ -479,8 +461,9 @@ def create_app(config: GuiConfig) -> FastAPI:
         collection: str,
         value: str,
         key: str = "_id",
+        path: Optional[str] = None,
     ) -> Dict[str, Any]:
-        storage = acquisition._storage
+        storage = acquisition.get_storage(path)
         try:
             doc = await storage.get(collection, value, key=key)
             if doc is None:
@@ -496,8 +479,9 @@ def create_app(config: GuiConfig) -> FastAPI:
         collection: str,
         value: str,
         key: str = "_id",
+        path: Optional[str] = None,
     ) -> Dict[str, Any]:
-        storage = acquisition._storage
+        storage = acquisition.get_storage(path)
         try:
             await storage.delete(collection, value, key=key)
             await hub_logs.broadcast_json(
@@ -508,13 +492,26 @@ def create_app(config: GuiConfig) -> FastAPI:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.put("/api/v1/storage/{collection}/update/{id}")
-    async def storage_update(collection: str, id: str, body: Dict[str, Any]) -> Dict[str, Any]:
-        storage = acquisition._storage
+    async def storage_update(collection: str, id: str, body: Dict[str, Any], path: Optional[str] = None) -> Dict[str, Any]:
+        storage = acquisition.get_storage(path)
         try:
             await storage.update(collection, id, body.get("value", {}))
             return {"updated": True, "collection": collection, "id": id}
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    web_dist = Path(__file__).resolve().parent / "webui_dist"
+    if config.serve_web and web_dist.exists():
+        app.mount("/assets", StaticFiles(directory=str(web_dist / "assets")), name="assets")
+
+        @app.get("/")
+        async def web_index() -> FileResponse:
+            return FileResponse(web_dist / "index.html")
+
+        @app.get("/{full_path:path}")
+        async def web_fallback(full_path: str) -> FileResponse:
+            _ = full_path
+            return FileResponse(web_dist / "index.html")
 
     @app.get("/healthz")
     async def healthz() -> Dict[str, str]:
@@ -536,4 +533,3 @@ def create_app(config: GuiConfig) -> FastAPI:
         return {"ready": db_ok and broker_ok, "duckdb": db_ok, "celery_broker": broker_ok}
 
     return app
-

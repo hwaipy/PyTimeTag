@@ -13,6 +13,7 @@ export const useRuntimeStore = defineStore("runtime", {
     logs: [],
     devices: [],
     currentDevice: null,
+    streamPaths: [],
     datablocksLimit: 50,
     jobsLimit: 50,
     logsLimit: 50,
@@ -55,18 +56,6 @@ export const useRuntimeStore = defineStore("runtime", {
     async fetchSession() {
       const res = await this._request(`${API_BASE}/session/status`);
       this.session = await res.json();
-    },
-    async startSession() {
-      await this._request(`${API_BASE}/session/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "simulator" }),
-      });
-      await this.fetchSession();
-    },
-    async stopSession() {
-      await this._request(`${API_BASE}/session/stop`, { method: "POST" });
-      await this.fetchSession();
     },
     async fetchDatablocks(limit = this.datablocksLimit) {
       this.datablocksLimit = limit;
@@ -205,24 +194,19 @@ export const useRuntimeStore = defineStore("runtime", {
       });
       return await res.json();
     },
-    // Device Instance Management APIs
+    // Current device API (read-only)
     async fetchDevices() {
-      const res = await this._request(`${API_BASE}/devices`);
-      const data = await res.json();
-      this.devices = data.items || [];
+      const res = await this._request(`${API_BASE}/device/current`);
+      const device = await res.json();
+      this.devices = [device];
+      this.currentDevice = device;
       return this.devices;
     },
-    async startDevice(deviceType, serialNumber) {
-      await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/start`, {
-        method: "POST",
-      });
-      await this.fetchDevices();
-    },
-    async stopDevice(deviceType, serialNumber) {
-      await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/stop`, {
-        method: "POST",
-      });
-      await this.fetchDevices();
+    async fetchStreamPaths() {
+      const res = await this._request(`${API_BASE}/stream_paths`);
+      const data = await res.json();
+      this.streamPaths = data.items || [];
+      return this.streamPaths;
     },
     async fetchDeviceChannels(deviceType, serialNumber) {
       const res = await this._request(`${API_BASE}/devices/${deviceType}/${serialNumber}/channels`);
@@ -238,4 +222,3 @@ export const useRuntimeStore = defineStore("runtime", {
     },
   },
 });
-

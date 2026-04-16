@@ -13,6 +13,24 @@
         </svg>
       </button>
     </div>
+
+    <div v-if="store.streamPaths.length" class="paths-section">
+      <div class="paths-title">Storage Paths</div>
+      <div class="paths-list">
+        <div v-for="p in store.streamPaths" :key="p.name" class="path-card">
+          <div class="path-name">{{ p.name }}</div>
+          <div class="path-row">
+            <span class="path-label">DuckDB</span>
+            <span class="path-value" :title="p.storage_db">{{ p.storage_db }}</span>
+          </div>
+          <div class="path-row">
+            <span class="path-label">Raw</span>
+            <span class="path-value" :title="p.datablock_dir">{{ p.datablock_dir }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <q-table
       class="config-qtable config-qtable-b"
       flat
@@ -279,12 +297,7 @@ function clampToRange(value, low, high) {
   return Math.min(Math.max(value, low), high);
 }
 
-function pickDefaultDevice(devices) {
-  if (!Array.isArray(devices) || devices.length === 0) return null;
-  return devices.find((device) => device.device_type === "simulator") || devices[0];
-}
-
-const selectedDevice = computed(() => store.currentDevice || pickDefaultDevice(store.devices));
+const selectedDevice = computed(() => store.currentDevice);
 let refreshInterval = null;
 
 function formatCountRate(channel) {
@@ -572,9 +585,7 @@ watch(
 
 onMounted(async () => {
   await store.fetchDevices();
-  if (!store.currentDevice) {
-    store.currentDevice = pickDefaultDevice(store.devices);
-  }
+  await store.fetchStreamPaths();
   await loadChannels();
   refreshInterval = window.setInterval(() => {
     loadChannels();
@@ -787,5 +798,69 @@ onUnmounted(() => {
 
 .settings-qtable :deep(.q-table tbody tr) {
   height: 44px;
+}
+
+.paths-section {
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+
+.paths-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.6);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.paths-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.path-card {
+  background: #f8f9fb;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-width: 260px;
+  flex: 1;
+}
+
+.path-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin-bottom: 8px;
+}
+
+.path-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.path-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  width: 50px;
+  flex-shrink: 0;
+}
+
+.path-value {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
 }
 </style>
