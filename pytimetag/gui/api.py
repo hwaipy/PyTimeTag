@@ -5,6 +5,7 @@ import contextlib
 import json
 import time
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -99,7 +100,11 @@ class AnalyserStorageStreamHub:
                 self._queues.remove(q)
 
     async def broadcast(self, payload: Dict[str, Any]) -> None:
-        line = json.dumps(payload, ensure_ascii=True)
+        out = {
+            **payload,
+            "ServerPushTime": datetime.now(timezone.utc).isoformat(),
+        }
+        line = json.dumps(out, ensure_ascii=True)
         async with self._lock:
             targets = list(self._queues)
         dead: List[asyncio.Queue] = []

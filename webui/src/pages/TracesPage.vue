@@ -3,7 +3,7 @@
     <div class="traces-layout">
       <!-- Left: Channel Counts -->
       <div class="counts-panel apple-card">
-        <div class="counts-header">Channel count rate</div>
+        <div class="counts-header">Channel Count Rate</div>
         <div class="counts-list">
           <div
             v-for="ch in channelIds"
@@ -29,7 +29,7 @@
       <div class="charts-panel">
         <div class="apple-card chart-card">
           <div class="chart-header">
-            <span class="chart-title">Count rate history</span>
+            <span class="chart-title">Count Rate History</span>
             <span class="chart-subtitle">per channel · ~120 s from storage stream</span>
           </div>
           <div ref="rateChartEl" class="chart-container"></div>

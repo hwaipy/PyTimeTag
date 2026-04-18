@@ -134,6 +134,19 @@ export const useRuntimeStore = defineStore("runtime", {
       es.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
+          const clientReceiveMs = Date.now();
+          const clientReceiveIso = new Date(clientReceiveMs).toISOString();
+          const serverPushMs = msg.ServerPushTime ? Date.parse(msg.ServerPushTime) : NaN;
+          const deltaMs =
+            Number.isFinite(serverPushMs) ? Math.round(clientReceiveMs - serverPushMs) : null;
+          console.log("[storage/analysers/stream] push", {
+            FetchTime: msg.FetchTime,
+            ServerPushTime: msg.ServerPushTime,
+            ClientReceiveTime: clientReceiveIso,
+            DeltaMs_clientMinusServerPush: deltaMs,
+            CounterAnalyser: msg.CounterAnalyser,
+            // HistogramAnalyser: msg.HistogramAnalyser,
+          });
           const raw = msg.CounterAnalyser || {};
           const idxs = Object.keys(raw)
             .filter((k) => k !== "Configuration")
@@ -174,7 +187,10 @@ export const useRuntimeStore = defineStore("runtime", {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${protocol}://${window.location.host}/ws/metrics`);
       ws.onmessage = (evt) => {
-        this.metrics = JSON.parse(evt.data);
+        const data = JSON.parse(evt.data);
+        this.metrics = data;
+        // Same payload as GET /session/status; Config page still binds Session Control to `session`.
+        this.session = data;
       };
       ws.onclose = () => {
         this._metricsWs = null;

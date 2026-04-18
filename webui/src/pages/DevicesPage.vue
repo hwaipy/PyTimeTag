@@ -299,6 +299,8 @@ function clampToRange(value, low, high) {
 
 const selectedDevice = computed(() => store.currentDevice);
 let refreshInterval = null;
+/** Avoid stacking /channels polls: 1s timer must not start a new fetch while the previous is still in flight (HTTP/1.1 per-host connection limit → many “pending”). */
+let channelsPollLocked = false;
 
 function formatCountRate(channel) {
   if ("count_rate" in channel && Number.isFinite(channel.count_rate)) {
@@ -588,7 +590,11 @@ onMounted(async () => {
   await store.fetchStreamPaths();
   await loadChannels();
   refreshInterval = window.setInterval(() => {
-    loadChannels();
+    if (channelsPollLocked) return;
+    channelsPollLocked = true;
+    loadChannels().finally(() => {
+      channelsPollLocked = false;
+    });
   }, 1000);
 });
 
