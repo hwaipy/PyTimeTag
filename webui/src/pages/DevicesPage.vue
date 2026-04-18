@@ -14,23 +14,6 @@
       </button>
     </div>
 
-    <div v-if="store.streamPaths.length" class="paths-section">
-      <div class="paths-title">Storage Paths</div>
-      <div class="paths-list">
-        <div v-for="p in store.streamPaths" :key="p.name" class="path-card">
-          <div class="path-name">{{ p.name }}</div>
-          <div class="path-row">
-            <span class="path-label">DuckDB</span>
-            <span class="path-value" :title="p.storage_db">{{ p.storage_db }}</span>
-          </div>
-          <div class="path-row">
-            <span class="path-label">Raw</span>
-            <span class="path-value" :title="p.datablock_dir">{{ p.datablock_dir }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <q-table
       class="config-qtable config-qtable-b"
       flat
@@ -121,6 +104,23 @@
         </q-td>
       </template>
     </q-table>
+
+    <div v-if="store.streamPaths.length" class="paths-section">
+      <div class="paths-title">Storage Paths</div>
+      <div class="paths-list">
+        <div v-for="p in store.streamPaths" :key="p.name" class="path-card">
+          <div v-if="p.name !== 'default'" class="path-name">{{ p.name }}</div>
+          <div class="path-row">
+            <span class="path-label">META</span>
+            <span class="path-value" :title="p.storage_db">{{ p.storage_db }}</span>
+          </div>
+          <div class="path-row">
+            <span class="path-label">RAW DATABLOCK</span>
+            <span class="path-value" :title="p.datablock_dir">{{ p.datablock_dir }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <q-dialog v-model="settingsDialogOpen" @keydown.esc="closeSettingsDialog">
       <q-card class="settings-dialog">
@@ -801,6 +801,7 @@ onUnmounted(() => {
 }
 
 .paths-section {
+  margin-top: 24px;
   margin-bottom: 16px;
   padding: 0 4px;
 }
@@ -816,7 +817,7 @@ onUnmounted(() => {
 
 .paths-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 12px;
 }
 
@@ -825,8 +826,6 @@ onUnmounted(() => {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
   padding: 12px 14px;
-  min-width: 260px;
-  flex: 1;
 }
 
 .path-name {
@@ -849,7 +848,7 @@ onUnmounted(() => {
   color: rgba(0, 0, 0, 0.45);
   text-transform: uppercase;
   letter-spacing: 0.3px;
-  width: 50px;
+  width: 100px;
   flex-shrink: 0;
 }
 
@@ -860,7 +859,7 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
+  flex: 1;
+  min-width: 0;
 }
 </style>

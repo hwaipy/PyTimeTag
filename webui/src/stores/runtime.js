@@ -118,21 +118,53 @@ export const useRuntimeStore = defineStore("runtime", {
       await this.fetchLogs(this.logsLimit + step);
     },
     connectMetrics() {
+      this._metricsWsRef = (this._metricsWsRef || 0) + 1;
+      if (this._metricsWs && this._metricsWs.readyState <= WebSocket.OPEN) {
+        return this._metricsWs;
+      }
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${protocol}://${window.location.host}/ws/metrics`);
       ws.onmessage = (evt) => {
         this.metrics = JSON.parse(evt.data);
       };
+      ws.onclose = () => {
+        this._metricsWs = null;
+        this._metricsWsRef = 0;
+      };
+      this._metricsWs = ws;
       return ws;
     },
+    disconnectMetrics() {
+      this._metricsWsRef = Math.max(0, (this._metricsWsRef || 1) - 1);
+      if (this._metricsWsRef === 0 && this._metricsWs) {
+        this._metricsWs.close();
+        this._metricsWs = null;
+      }
+    },
     connectLogs() {
+      this._logsWsRef = (this._logsWsRef || 0) + 1;
+      if (this._logsWs && this._logsWs.readyState <= WebSocket.OPEN) {
+        return this._logsWs;
+      }
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${protocol}://${window.location.host}/ws/logs`);
       ws.onmessage = (evt) => {
         const row = JSON.parse(evt.data);
         this.logs = [...this.logs.slice(-199), row];
       };
+      ws.onclose = () => {
+        this._logsWs = null;
+        this._logsWsRef = 0;
+      };
+      this._logsWs = ws;
       return ws;
+    },
+    disconnectLogs() {
+      this._logsWsRef = Math.max(0, (this._logsWsRef || 1) - 1);
+      if (this._logsWsRef === 0 && this._logsWs) {
+        this._logsWs.close();
+        this._logsWs = null;
+      }
     },
     // Storage API methods - unified style: /storage/{collection}/{function}/{arg}
     async fetchStorageCollections() {

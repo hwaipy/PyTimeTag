@@ -3,6 +3,7 @@ __author__ = "Hwaipy"
 __email__ = "hwaipy@gmail.com"
 
 import json
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -22,25 +23,27 @@ class Storage:
         self.db = db
         self.tz = self._load_timezone(timezone)
         self.existCollections = None
+        self._lock = threading.Lock()
 
     async def append(self, collection: str, data: Dict[str, Any], fetchTime: Optional[Any] = None):
         await self.__beforeModify(collection)
         record_dt = datetime.now(tz=self.tz)
         fetch_dt = self.__parseFetchTime(fetchTime) if fetchTime is not None else record_dt
-        self.db.execute(
-            f"""
-            INSERT INTO "{self.__table_name(collection)}"
-            (_id, RecordTimeEpochUs, FetchTimeEpochUs, DataJSON, ExtraJSON)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            [
-                str(uuid.uuid4()),
-                self.__to_epoch_us(record_dt),
-                self.__to_epoch_us(fetch_dt),
-                json.dumps(data, ensure_ascii=True),
-                json.dumps({}, ensure_ascii=True),
-            ],
-        )
+        with self._lock:
+            self.db.execute(
+                f"""
+                INSERT INTO "{self.__table_name(collection)}"
+                (_id, RecordTimeEpochUs, FetchTimeEpochUs, DataJSON, ExtraJSON)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    str(uuid.uuid4()),
+                    self.__to_epoch_us(record_dt),
+                    self.__to_epoch_us(fetch_dt),
+                    json.dumps(data, ensure_ascii=True),
+                    json.dumps({}, ensure_ascii=True),
+                ],
+            )
 
     async def latest(
         self,
@@ -97,14 +100,15 @@ class Storage:
     async def delete(self, collection: str, value: Any, key: str = "_id"):
         await self.__beforeModify(collection)
         table = self.__table_name(collection)
-        if key == "_id":
-            self.db.execute(f'DELETE FROM "{table}" WHERE _id = ?', [str(value)])
-        elif key == Storage.FetchTime:
-            self.db.execute(f'DELETE FROM "{table}" WHERE FetchTimeEpochUs = ?', [self.__to_epoch_us(self.__parseFetchTime(value))])
-        elif key == Storage.RecordTime:
-            self.db.execute(f'DELETE FROM "{table}" WHERE RecordTimeEpochUs = ?', [self.__to_epoch_us(self.__parseFetchTime(value))])
-        else:
-            self.db.execute(f'DELETE FROM "{table}" WHERE json_extract_string(ExtraJSON, ?) = ?', [f"$.{key}", str(value)])
+        with self._lock:
+            if key == "_id":
+                self.db.execute(f'DELETE FROM "{table}" WHERE _id = ?', [str(value)])
+            elif key == Storage.FetchTime:
+                self.db.execute(f'DELETE FROM "{table}" WHERE FetchTimeEpochUs = ?', [self.__to_epoch_us(self.__parseFetchTime(value))])
+            elif key == Storage.RecordTime:
+                self.db.execute(f'DELETE FROM "{table}" WHERE RecordTimeEpochUs = ?', [self.__to_epoch_us(self.__parseFetchTime(value))])
+            else:
+                self.db.execute(f'DELETE FROM "{table}" WHERE json_extract_string(ExtraJSON, ?) = ?', [f"$.{key}", str(value)])
 
     async def update(self, collection: str, id: str, value: Dict[str, Any]):
         await self.__beforeModify(collection)
@@ -125,14 +129,15 @@ class Storage:
                 fetch_epoch = self.__to_epoch_us(self.__parseFetchTime(v))
             else:
                 extra[k] = v
-        self.db.execute(
-            f"""
-            UPDATE "{table}"
-            SET RecordTimeEpochUs = ?, FetchTimeEpochUs = ?, DataJSON = ?, ExtraJSON = ?
-            WHERE _id = ?
-            """,
-            [record_epoch, fetch_epoch, json.dumps(data, ensure_ascii=True), json.dumps(extra, ensure_ascii=True), id],
-        )
+        with self._lock:
+            self.db.execute(
+                f"""
+                UPDATE "{table}"
+                SET RecordTimeEpochUs = ?, FetchTimeEpochUs = ?, DataJSON = ?, ExtraJSON = ?
+                WHERE _id = ?
+                """,
+                [record_epoch, fetch_epoch, json.dumps(data, ensure_ascii=True), json.dumps(extra, ensure_ascii=True), id],
+            )
 
     @staticmethod
     def _load_timezone(tz_name: str):
@@ -176,7 +181,8 @@ class Storage:
         return dt_utc.astimezone(self.tz).isoformat()
 
     async def __senseExistCollections(self):
-        rows = self.db.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()").fetchall()
+        with self._lock:
+            rows = self.db.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()").fetchall()
         names = [r[0] for r in rows]
         self.existCollections = [name[8:] for name in names if name.startswith("Storage_")]
 
@@ -185,19 +191,20 @@ class Storage:
             await self.__senseExistCollections()
         if collection not in self.existCollections:
             table = self.__table_name(collection)
-            self.db.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS "{table}" (
-                    _id TEXT PRIMARY KEY,
-                    RecordTimeEpochUs BIGINT NOT NULL,
-                    FetchTimeEpochUs BIGINT NOT NULL,
-                    DataJSON TEXT NOT NULL,
-                    ExtraJSON TEXT NOT NULL
+            with self._lock:
+                self.db.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS "{table}" (
+                        _id TEXT PRIMARY KEY,
+                        RecordTimeEpochUs BIGINT NOT NULL,
+                        FetchTimeEpochUs BIGINT NOT NULL,
+                        DataJSON TEXT NOT NULL,
+                        ExtraJSON TEXT NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            self.db.execute(f'CREATE INDEX IF NOT EXISTS "{table}_fetch_idx" ON "{table}" (FetchTimeEpochUs)')
-            self.db.execute(f'CREATE INDEX IF NOT EXISTS "{table}_record_idx" ON "{table}" (RecordTimeEpochUs)')
+                self.db.execute(f'CREATE INDEX IF NOT EXISTS "{table}_fetch_idx" ON "{table}" (FetchTimeEpochUs)')
+                self.db.execute(f'CREATE INDEX IF NOT EXISTS "{table}_record_idx" ON "{table}" (RecordTimeEpochUs)')
             self.existCollections.append(collection)
 
     def __reformResult(self, result_row: Dict[str, Any]) -> Dict[str, Any]:
@@ -247,7 +254,8 @@ class Storage:
         return self.__to_epoch_us(self.__parseFetchTime(after)) < row["FetchTimeEpochUs"]
 
     def __read_rows(self, table: str, query: str, params: List[Any]) -> List[Dict[str, Any]]:
-        rows = self.db.execute(query, params).fetchall()
+        with self._lock:
+            rows = self.db.execute(query, params).fetchall()
         result = []
         for row in rows:
             result.append(

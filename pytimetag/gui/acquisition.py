@@ -81,10 +81,31 @@ class AcquisitionService:
             }
         )
         self._hist_last_error = ""
+        self._rate_history: deque[Dict[str, Any]] = deque(maxlen=200)
+        self._last_block_time: Optional[float] = None
+        self._block_intervals: deque[float] = deque(maxlen=100)
 
     @property
     def default_path_name(self) -> str:
         return self._stream_paths[0].name if self._stream_paths else "default"
+
+    def get_block_interval_stats(self) -> Dict[str, Any]:
+        with self._lock:
+            intervals = list(self._block_intervals)
+            last = self._last_block_time
+        n = len(intervals)
+        if n == 0:
+            return {"count": 0, "mean": 0, "std": 0, "min": 0, "max": 0, "last": 0}
+        mean = sum(intervals) / n
+        variance = sum((x - mean) ** 2 for x in intervals) / n
+        return {
+            "count": n,
+            "mean": mean,
+            "std": variance ** 0.5,
+            "min": min(intervals),
+            "max": max(intervals),
+            "last": intervals[-1] if intervals else 0,
+        }
 
     def get_storage(self, name: Optional[str] = None) -> Storage:
         if name is None:
@@ -106,14 +127,37 @@ class AcquisitionService:
     def _persist_analysers(self, storage: Storage, block: DataBlock, rows: List[tuple[str, dict]]) -> None:
         if not rows:
             return
-        end_s = block.dataTimeEnd * block.resolution
-        fetch_time = datetime.fromtimestamp(end_s, tz=timezone.utc).isoformat()
+        fetch_time = datetime.now(tz=timezone.utc).isoformat()
 
         async def _persist() -> None:
             for name, doc in rows:
                 await storage.append(name, doc, fetch_time)
 
-        asyncio.run(_persist())
+        try:
+            asyncio.run(_persist())
+        except BaseException as exc:
+            self._log_cb("error", f"persist failed: {exc}")
+
+    def get_rate_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+        with self._lock:
+            history = list(self._rate_history)
+        items = history[-limit:] if limit < len(history) else history
+        result = []
+        prev_time = None
+        for item in items:
+            t = datetime.fromisoformat(item["FetchTime"])
+            if prev_time is None:
+                prev_time = t
+                continue
+            dt = (t - prev_time).total_seconds()
+            counts = item["Data"]
+            rates = []
+            for ch in range(self._channel_count):
+                c = counts.get(str(ch), 0)
+                rates.append(round(c / dt) if dt > 0 else 0)
+            result.append({"time": int(t.timestamp() * 1000), "rates": rates})
+            prev_time = t
+        return result
 
     def analyser_status(self) -> Dict[str, Any]:
         return {
@@ -179,6 +223,8 @@ class AcquisitionService:
                         self._hist_last_error = str(exc)
                         self._log_cb("error", f"HistogramAnalyser failed: {exc}")
                 self._persist_analysers(path_cfg["storage"], block, analyser_rows)
+                fetch_time_iso = datetime.now(tz=timezone.utc).isoformat()
+                now = time.time()
                 with self._lock:
                     block_events = int(sum(block.sizes))
                     self._events_total += block_events
@@ -186,6 +232,14 @@ class AcquisitionService:
                     block_duration_s = max((block.dataTimeEnd - block.dataTimeBegin) * block.resolution, 1e-9)
                     block_rate = int(block_events / block_duration_s)
                     self._recent_rates.append(block_rate)
+                    self._rate_history.append({
+                        "FetchTime": fetch_time_iso,
+                        "Data": {k: v for k, v in counter_res.items() if k != "Configuration"},
+                    })
+                    if self._last_block_time is not None:
+                        interval = (now - self._last_block_time) * 1000.0
+                        self._block_intervals.append(interval)
+                    self._last_block_time = now
                 self._last_analyser = {
                     "CounterAnalyser": counter_res,
                     "HistogramAnalyser": hist_res,

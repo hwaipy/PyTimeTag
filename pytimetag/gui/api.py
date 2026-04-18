@@ -140,15 +140,53 @@ def create_app(config: GuiConfig) -> FastAPI:
         split_cfg = SplitByChannelEvent(config.split_channel)
 
     resolution = 1e-12
+
+    # Event-loop reference so metrics_cb (called from the device thread) can
+    # safely schedule WS broadcasts back on the main loop.
+    _main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def _metrics_broadcast(metrics: Dict[str, Any]) -> None:
+        loop = _main_loop
+        if loop is None or not loop.is_running():
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(
+                hub_metrics.broadcast_json(metrics), loop
+            )
+        except RuntimeError:
+            pass
+
     acquisition = AcquisitionService(
         stream_paths=stream_paths,
         channel_count=config.device_channel_count,
         resolution=resolution,
         split=split_cfg,
-        metrics_cb=lambda m: None,
+        metrics_cb=_metrics_broadcast,
         log_cb=append_log,
         save_raw_data=config.save_raw_data,
     )
+
+    @app.on_event("startup")
+    async def _save_event_loop() -> None:
+        nonlocal _main_loop
+        _main_loop = asyncio.get_running_loop()
+
+    async def _periodic_log_block_intervals() -> None:
+        while True:
+            await asyncio.sleep(10.0)
+            stats = acquisition.get_block_interval_stats()
+            if stats["count"] == 0:
+                continue
+            cv = (stats["std"] / stats["mean"] * 100) if stats["mean"] > 0 else 0
+            print(
+                f"[Backend] block interval | count: {stats['count']} "
+                f"avg: {stats['mean']:.1f}ms std: {stats['std']:.1f}ms "
+                f"min: {stats['min']:.1f}ms max: {stats['max']:.1f}ms CV: {cv:.1f}%"
+            )
+
+    @app.on_event("startup")
+    async def _start_interval_logger() -> None:
+        asyncio.create_task(_periodic_log_block_intervals())
 
     # Create the single device instance via instance_manager.
     # Pass acquisition's word callback so the service receives the raw stream.
@@ -199,6 +237,15 @@ def create_app(config: GuiConfig) -> FastAPI:
     async def session_status() -> Dict[str, Any]:
         return acquisition.snapshot_metrics()
 
+    @app.get("/api/v1/rates")
+    async def get_rates(limit: int = 100) -> Dict[str, Any]:
+        return {"items": acquisition.get_rate_history(limit)}
+
+    @app.get("/api/v1/debug/block_intervals")
+    async def get_block_intervals() -> Dict[str, Any]:
+        return acquisition.get_block_interval_stats()
+        return {"items": acquisition.get_rate_history(limit)}
+
     @app.get("/api/v1/sources")
     async def list_sources() -> Dict[str, Any]:
         return {"items": ["simulator"] + list_cli_hardware_sources()}
@@ -218,7 +265,6 @@ def create_app(config: GuiConfig) -> FastAPI:
                 for cfg in stream_paths
             ]
         }
-        return inst.to_dict()
 
     @app.get("/api/v1/devices/{device_type}/{serial_number}/channels")
     async def get_device_channels(device_type: str, serial_number: str) -> Dict[str, Any]:
@@ -358,9 +404,11 @@ def create_app(config: GuiConfig) -> FastAPI:
     async def ws_metrics(websocket: WebSocket) -> None:
         await hub_metrics.connect(websocket)
         try:
+            # Send initial snapshot immediately; real-time updates are
+            # pushed by _metrics_broadcast when each DataBlock arrives.
+            await websocket.send_json(acquisition.snapshot_metrics())
             while True:
-                await websocket.send_json(acquisition.snapshot_metrics())
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(30.0)
         except WebSocketDisconnect:
             await hub_metrics.disconnect(websocket)
 
