@@ -10,18 +10,17 @@
             :key="ch"
             class="count-row"
           >
-            <span class="count-label">Ch {{ ch }}</span>
-            <span class="count-value">{{ formatNumber(latestCounts[ch] ?? 0) }}</span>
+            <span class="count-label">CH{{ String(ch).padStart(2, '0') }}</span>
+            <span class="count-value">{{ formatCount(latestCounts[ch] ?? 0) }}</span>
+            <span class="count-at">@</span>
+            <input
+              v-model.number="channelDelays[ch]"
+              type="number"
+              class="delay-input"
+              step="0.001"
+            />
+            <span class="count-unit">ns</span>
           </div>
-        </div>
-        <div class="stats-panel">
-          <div class="stats-header">Rate Update Interval Stats (ms)</div>
-          <div class="stats-row"><span>count</span><span>{{ intervalStats.count }}</span></div>
-          <div class="stats-row"><span>mean</span><span>{{ formatNumber(intervalStats.mean) }}</span></div>
-          <div class="stats-row"><span>std</span><span>{{ formatNumber(intervalStats.std) }}</span></div>
-          <div class="stats-row"><span>min</span><span>{{ formatNumber(intervalStats.min) }}</span></div>
-          <div class="stats-row"><span>max</span><span>{{ formatNumber(intervalStats.max) }}</span></div>
-          <div class="stats-row"><span>last</span><span>{{ formatNumber(intervalStats.last) }}</span></div>
         </div>
       </div>
 
@@ -98,6 +97,7 @@ const latestCounts = ref({});
 const rateHistory = ref([]);
 const histEnabled = ref(true);
 const histError = ref('');
+const channelDelays = ref(Array.from({ length: 16 }, () => 0));
 
 const histConfig = reactive({
   Sync: 0,
@@ -134,6 +134,11 @@ const channelIds = computed(() => Array.from({ length: channelCount.value }, (_,
 function formatNumber(num) {
   if (num === undefined || num === null) return '-';
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(num);
+}
+
+function formatCount(num) {
+  if (num === undefined || num === null) return '-';
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(num);
 }
 
 const rateTimeFormatter = new Intl.DateTimeFormat([], {
@@ -351,16 +356,12 @@ async function loadAnalyserStatus() {
   if (cfg.Divide !== undefined) histConfig.Divide = cfg.Divide;
 }
 
-let statsInterval = null;
-
 onMounted(async () => {
-  let metricsWs = null;
   try {
     await store.fetchDevices();
     await loadAnalyserStatus();
-    metricsWs = store.connectMetrics();
+    store.connectMetrics();
     await fetchHistogram();
-    statsInterval = setInterval(logIntervalStats, 10000);
     await nextTick();
     initRateChart();
     window.addEventListener('resize', () => rateChart?.resize());
@@ -369,10 +370,6 @@ onMounted(async () => {
   }
   onUnmounted(() => {
     store.disconnectMetrics();
-    if (statsInterval) {
-      clearInterval(statsInterval);
-      statsInterval = null;
-    }
     rateChart?.dispose();
     rateChart = null;
   });
@@ -387,8 +384,7 @@ onMounted(async () => {
 }
 
 .traces-layout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
+  display: flex;
   gap: 16px;
   align-items: start;
 }
@@ -397,6 +393,8 @@ onMounted(async () => {
   background: white;
   padding: 16px;
   border-radius: 12px;
+  width: 280px;
+  flex-shrink: 0;
 }
 
 .counts-header {
@@ -409,49 +407,66 @@ onMounted(async () => {
 .counts-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .count-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 10px;
+  gap: 4px;
+  padding: 6px 8px;
   background: rgba(0, 0, 0, 0.03);
   border-radius: 8px;
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .count-label {
   font-size: 13px;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.6);
+  font-weight: 700;
+  color: #1d1d1f;
+  width: 38px;
+  flex-shrink: 0;
 }
 
 .count-value {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #1d1d1f;
+  width: 7ch;
+  text-align: right;
+  flex-shrink: 0;
 }
 
-.stats-panel {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+.count-at {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
 }
 
-.stats-header {
-  font-size: 12px;
-  font-weight: 600;
+.delay-input {
+  width: 6ch;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.6);
   color: #1d1d1f;
-  margin-bottom: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  flex-shrink: 0;
 }
 
-.stats-row {
-  display: flex;
-  justify-content: space-between;
+.delay-input:focus {
+  outline: none;
+  border-color: #0071e3;
+}
+
+.count-unit {
   font-size: 12px;
-  padding: 3px 0;
-  color: rgba(0, 0, 0, 0.7);
+  color: rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
 }
 
 .charts-panel {
@@ -564,7 +579,11 @@ onMounted(async () => {
 
 @media (max-width: 900px) {
   .traces-layout {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .counts-panel {
+    width: 100%;
   }
 }
 </style>
