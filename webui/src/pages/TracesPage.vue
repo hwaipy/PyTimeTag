@@ -382,6 +382,7 @@ onMounted(async () => {
 
 .traces-page {
   padding-bottom: 48px;
+  overflow-x: auto;
 }
 
 .traces-layout {
@@ -590,11 +591,7 @@ onMounted(async () => {
 
 @media (max-width: 900px) {
   .traces-layout {
-    flex-direction: column;
-  }
-
-  .counts-panel {
-    width: 100%;
+    flex-wrap: nowrap;
   }
 }
 </style>
