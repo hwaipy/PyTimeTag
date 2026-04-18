@@ -3,9 +3,15 @@
 </template>
 
 <script setup>
-import { onMounted } from "vue";
+import { onMounted, onUnmounted } from "vue";
+import { useRuntimeStore } from "./stores/runtime";
+
+const store = useRuntimeStore();
 
 onMounted(() => {
+  store.fetchDevices().catch(() => {});
+  store.startStorageAnalyserStream();
+
   // Hide the initial loading screen when Vue app is ready
   const loader = document.getElementById("app-loader");
   if (loader) {
@@ -18,5 +24,9 @@ onMounted(() => {
       }, 400);
     });
   }
+});
+
+onUnmounted(() => {
+  store.stopStorageAnalyserStream();
 });
 </script>

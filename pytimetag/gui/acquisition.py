@@ -34,6 +34,7 @@ class AcquisitionService:
         metrics_cb: Callable[[Dict[str, Any]], None],
         log_cb: Callable[[str, str], None],
         save_raw_data: bool = False,
+        storage_stream_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> None:
         self._stream_paths = stream_paths
         self._channel_count = channel_count
@@ -42,6 +43,10 @@ class AcquisitionService:
         self._metrics_cb = metrics_cb
         self._log_cb = log_cb
         self._save_raw_data = save_raw_data
+        self._stream_cb = storage_stream_cb
+        self._stream_sec_start = 0.0
+        self._stream_sec_counts: Dict[str, int] = {}
+        self._stream_sec_hist: Optional[Dict[str, Any]] = None
         self._lock = Lock()
         self._running = False
         self._started_at = 0.0
@@ -225,6 +230,7 @@ class AcquisitionService:
                 self._persist_analysers(path_cfg["storage"], block, analyser_rows)
                 fetch_time_iso = datetime.now(tz=timezone.utc).isoformat()
                 now = time.time()
+                payload_to_emit: Optional[Dict[str, Any]] = None
                 with self._lock:
                     block_events = int(sum(block.sizes))
                     self._events_total += block_events
@@ -240,10 +246,34 @@ class AcquisitionService:
                         interval = (now - self._last_block_time) * 1000.0
                         self._block_intervals.append(interval)
                     self._last_block_time = now
-                self._last_analyser = {
-                    "CounterAnalyser": counter_res,
-                    "HistogramAnalyser": hist_res,
-                }
+                    self._last_analyser = {
+                        "CounterAnalyser": counter_res,
+                        "HistogramAnalyser": hist_res,
+                    }
+                    if self._stream_cb is not None:
+                        if self._stream_sec_start == 0.0:
+                            self._stream_sec_start = now
+                        for k, v in counter_res.items():
+                            if k == "Configuration":
+                                continue
+                            self._stream_sec_counts[k] = self._stream_sec_counts.get(k, 0) + int(v)
+                        if self._hist.isTurnedOn() and hist_res:
+                            self._stream_sec_hist = hist_res
+                        elif not self._hist.isTurnedOn():
+                            self._stream_sec_hist = None
+                        elapsed = now - self._stream_sec_start
+                        if elapsed >= 1.0:
+                            payload_to_emit = {
+                                "FetchTime": datetime.now(tz=timezone.utc).isoformat(),
+                                "CounterAnalyser": dict(self._stream_sec_counts),
+                                "HistogramAnalyser": (
+                                    dict(self._stream_sec_hist) if self._stream_sec_hist is not None else None
+                                ),
+                            }
+                            self._stream_sec_counts.clear()
+                            self._stream_sec_start = now
+                if payload_to_emit is not None:
+                    self._stream_cb(payload_to_emit)
                 self._metrics_cb(self.snapshot_metrics())
 
     def start(self) -> Dict[str, Any]:
@@ -257,6 +287,9 @@ class AcquisitionService:
             self._last_analyser = {}
             self._rate_inst = 0
             self._recent_rates.clear()
+            self._stream_sec_start = 0.0
+            self._stream_sec_counts.clear()
+            self._stream_sec_hist = None
         self._log_cb("info", "Acquisition started")
         return self.snapshot_metrics()
 

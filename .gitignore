@@ -161,3 +161,4 @@ store_test
 .claude
 *.duckdb
 *.duckdb.wal
+.references

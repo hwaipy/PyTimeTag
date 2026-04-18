@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 import duckdb
 from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -80,6 +80,46 @@ class WsHub:
                         self._clients.remove(ws)
 
 
+class AnalyserStorageStreamHub:
+    """Broadcasts 1 Hz CounterAnalyser + HistogramAnalyser snapshots (aligned with storage rows)."""
+
+    def __init__(self) -> None:
+        self._queues: List[asyncio.Queue] = []
+        self._lock = asyncio.Lock()
+
+    async def subscribe(self) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=16)
+        async with self._lock:
+            self._queues.append(q)
+        return q
+
+    async def unsubscribe(self, q: asyncio.Queue) -> None:
+        async with self._lock:
+            if q in self._queues:
+                self._queues.remove(q)
+
+    async def broadcast(self, payload: Dict[str, Any]) -> None:
+        line = json.dumps(payload, ensure_ascii=True)
+        async with self._lock:
+            targets = list(self._queues)
+        dead: List[asyncio.Queue] = []
+        for q in targets:
+            try:
+                while q.full():
+                    try:
+                        q.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                q.put_nowait(line)
+            except BaseException:
+                dead.append(q)
+        if dead:
+            async with self._lock:
+                for q in dead:
+                    if q in self._queues:
+                        self._queues.remove(q)
+
+
 def _init_gui_tables(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(
         """
@@ -111,6 +151,7 @@ def create_app(config: GuiConfig) -> FastAPI:
     app = FastAPI(title="PyTimeTag GUI API", version="1.0.0")
     hub_metrics = WsHub()
     hub_logs = WsHub()
+    analyser_stream_hub = AnalyserStorageStreamHub()
 
     stream_paths = config.resolved_stream_paths()
     for cfg in stream_paths:
@@ -156,6 +197,15 @@ def create_app(config: GuiConfig) -> FastAPI:
         except RuntimeError:
             pass
 
+    def _analyser_storage_stream_broadcast(payload: Dict[str, Any]) -> None:
+        loop = _main_loop
+        if loop is None or not loop.is_running():
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(analyser_stream_hub.broadcast(payload), loop)
+        except RuntimeError:
+            pass
+
     acquisition = AcquisitionService(
         stream_paths=stream_paths,
         channel_count=config.device_channel_count,
@@ -164,6 +214,7 @@ def create_app(config: GuiConfig) -> FastAPI:
         metrics_cb=_metrics_broadcast,
         log_cb=append_log,
         save_raw_data=config.save_raw_data,
+        storage_stream_cb=_analyser_storage_stream_broadcast,
     )
 
     @app.on_event("startup")
@@ -244,7 +295,6 @@ def create_app(config: GuiConfig) -> FastAPI:
     @app.get("/api/v1/debug/block_intervals")
     async def get_block_intervals() -> Dict[str, Any]:
         return acquisition.get_block_interval_stats()
-        return {"items": acquisition.get_rate_history(limit)}
 
     @app.get("/api/v1/sources")
     async def list_sources() -> Dict[str, Any]:
@@ -431,6 +481,30 @@ def create_app(config: GuiConfig) -> FastAPI:
         return {"items": rows[-int(limit):]}
 
     # Storage API - unified style: /storage/{collection}/{function}/{arg}
+    @app.get("/api/v1/storage/analysers/stream")
+    async def storage_analysers_stream() -> StreamingResponse:
+        """Long-lived SSE feed: ~1 Hz JSON with CounterAnalyser + HistogramAnalyser (same shape as storage `Data`)."""
+
+        queue = await analyser_stream_hub.subscribe()
+
+        async def event_gen():
+            try:
+                while True:
+                    line = await queue.get()
+                    yield f"data: {line}\n\n"
+            finally:
+                await analyser_stream_hub.unsubscribe(queue)
+
+        return StreamingResponse(
+            event_gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     @app.get("/api/v1/storage/collections")
     async def storage_list_collections(path: Optional[str] = None) -> Dict[str, Any]:
         storage = acquisition.get_storage(path)

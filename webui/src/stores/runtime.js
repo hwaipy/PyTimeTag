@@ -19,6 +19,10 @@ export const useRuntimeStore = defineStore("runtime", {
     logsLimit: 50,
     loadingCount: 0,
     loadingProgress: 0,
+    latestCounts: {},
+    metricsHistory: [],
+    latestHistogramAnalyser: null,
+    _storageAnalyserStreamEs: null,
   }),
   getters: {
     isLoading: (state) => state.loadingCount > 0,
@@ -116,6 +120,51 @@ export const useRuntimeStore = defineStore("runtime", {
     },
     async loadMoreLogs(step = 50) {
       await this.fetchLogs(this.logsLimit + step);
+    },
+    /** Single site-wide SSE feed: ~1 Hz analyser snapshots from storage pipeline (see GET /storage/analysers/stream). */
+    startStorageAnalyserStream() {
+      if (this._storageAnalyserStreamEs) return;
+      let es;
+      try {
+        es = new EventSource(`${API_BASE}/storage/analysers/stream`);
+      } catch {
+        return;
+      }
+      this._storageAnalyserStreamEs = es;
+      es.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          const raw = msg.CounterAnalyser || {};
+          const idxs = Object.keys(raw)
+            .filter((k) => k !== "Configuration")
+            .map((k) => parseInt(k, 10))
+            .filter((n) => !Number.isNaN(n));
+          let chCount = this.currentDevice?.channel_count;
+          if (!chCount || chCount < 1) {
+            chCount = idxs.length ? Math.max(...idxs) + 1 : 8;
+          }
+          const nextCounts = {};
+          const rates = [];
+          for (let ch = 0; ch < chCount; ch++) {
+            const v = Number(raw[String(ch)] ?? 0);
+            nextCounts[ch] = v;
+            rates.push(v);
+          }
+          this.latestCounts = nextCounts;
+          const t = msg.FetchTime ? new Date(msg.FetchTime).getTime() : Date.now();
+          const nextHist = [...this.metricsHistory, { time: t, rates }];
+          this.metricsHistory = nextHist.length > 120 ? nextHist.slice(-120) : nextHist;
+          this.latestHistogramAnalyser = msg.HistogramAnalyser ?? null;
+        } catch {
+          /* ignore malformed */
+        }
+      };
+    },
+    stopStorageAnalyserStream() {
+      if (this._storageAnalyserStreamEs) {
+        this._storageAnalyserStreamEs.close();
+        this._storageAnalyserStreamEs = null;
+      }
     },
     connectMetrics() {
       this._metricsWsRef = (this._metricsWsRef || 0) + 1;
