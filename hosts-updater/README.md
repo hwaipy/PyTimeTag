@@ -12,8 +12,7 @@
 ## 安装
 
 ```bash
-cd hosts-updater
-sudo python3 hosts_updater.py install
+sudo python3 ~/hosts_updater.py install
 ```
 
 安装后会创建两个 systemd 单元：
@@ -24,10 +23,10 @@ sudo python3 hosts_updater.py install
 
 ```bash
 # 立即执行一次更新
-sudo python3 hosts_updater.py run
+sudo python3 ~/hosts_updater.py run
 
 # 查看状态和历史记录
-python3 hosts_updater.py status
+python3 ~/hosts_updater.py status
 
 # 查看定时器状态
 systemctl status hosts-updater.timer

@@ -433,7 +433,7 @@ onMounted(async () => {
   font-size: 15px;
   font-weight: 600;
   color: #1d1d1f;
-  width: 7ch;
+  width: 9ch;
   text-align: right;
   flex-shrink: 0;
 }
