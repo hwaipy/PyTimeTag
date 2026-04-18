@@ -12,7 +12,7 @@
           >
             <span class="count-label">CH{{ String(ch).padStart(2, '0') }}</span>
             <span class="count-value">{{ formatCount(latestCounts[ch] ?? 0) }}</span>
-            <span class="count-at">@</span>
+            <span class="count-at">&nbsp;@&nbsp;</span>
             <input
               v-model.number="channelDelays[ch]"
               type="number"
@@ -430,7 +430,7 @@ onMounted(async () => {
 }
 
 .count-value {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: #1d1d1f;
   width: 7ch;
@@ -439,7 +439,7 @@ onMounted(async () => {
 }
 
 .count-at {
-  font-size: 13px;
+  font-size: 15px;
   color: rgba(0, 0, 0, 0.4);
   flex-shrink: 0;
 }
@@ -448,19 +448,29 @@ onMounted(async () => {
   width: 6ch;
   padding: 2px 4px;
   border-radius: 4px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  background: rgba(255, 255, 255, 0.6);
+  border: none;
+  background: transparent;
   color: #1d1d1f;
   font-size: 12px;
   font-family: inherit;
   font-variant-numeric: tabular-nums;
   text-align: right;
   flex-shrink: 0;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.delay-input::-webkit-inner-spin-button,
+.delay-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .delay-input:focus {
   outline: none;
-  border-color: #0071e3;
+  border: 1px solid #0071e3;
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .count-unit {
