@@ -391,9 +391,9 @@ onMounted(async () => {
 
 .counts-panel {
   background: white;
-  padding: 16px;
+  padding: 12px;
   border-radius: 12px;
-  width: 280px;
+  width: auto;
   flex-shrink: 0;
 }
 
@@ -448,7 +448,7 @@ onMounted(async () => {
   width: 6ch;
   padding: 2px 4px;
   border-radius: 4px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: #1d1d1f;
   font-size: 12px;
@@ -469,7 +469,7 @@ onMounted(async () => {
 
 .delay-input:focus {
   outline: none;
-  border: 1px solid #0071e3;
+  border-color: #0071e3;
   background: rgba(255, 255, 255, 0.6);
 }
 
