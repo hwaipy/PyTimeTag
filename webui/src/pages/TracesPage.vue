@@ -14,10 +14,11 @@
             <span class="count-value">{{ formatCount(latestCounts[ch] ?? 0) }}</span>
             <span class="count-at">&nbsp;@&nbsp;</span>
             <input
-              v-model.number="channelDelays[ch]"
+              v-model="channelDelays[ch]"
               type="number"
               class="delay-input"
-              step="0.001"
+              step="any"
+              @blur="channelDelays[ch] = parseFloat(channelDelays[ch]) || 0"
             />
             <span class="count-unit">ns</span>
           </div>
