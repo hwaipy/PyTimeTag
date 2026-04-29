@@ -390,18 +390,23 @@ class TimeTagSimulator(TimeTagDevice):
         if span_ticks <= 0:
             return np.array([], dtype=np.int64)
         dt_s = span_ticks * self.resolution
-        pulse_count = max(1, int(round(ch.pulse_count * dt_s)))
         event_count = max(1, int(round(ch.pulse_events * dt_s)))
         sigma_ticks = float(ch.pulse_sigma_s) / self.resolution
-        if pulse_count < 1 or event_count < 1:
-            return np.array([], dtype=np.int64)
         pulse_rate_hz = float(ch.pulse_count)
-        centers = self._synthesize_period_ticks(t0, t1, pulse_rate_hz)
-        if centers.size == 0:
+        if pulse_rate_hz <= 0.0 or event_count < 1:
             return np.array([], dtype=np.int64)
-        pulse_indices = self._rng.integers(0, centers.size, size=event_count, endpoint=False)
+        P = int(round(1.0 / (pulse_rate_hz * self.resolution)))
+        if P < 1:
+            P = 1
+        k_lo = self._ceil_div_nonneg(t0, P)
+        k_hi = (t1 - 1) // P
+        if k_lo > k_hi:
+            return np.array([], dtype=np.int64)
+        n_centers = k_hi - k_lo + 1
+        pulse_indices = self._rng.integers(0, n_centers, size=event_count, endpoint=False)
+        pulse_ticks = (k_lo + pulse_indices).astype(np.int64) * np.int64(P)
         pulse_position = self._rng.normal(0.0, sigma_ticks, size=event_count)
-        ts = (centers[pulse_indices].astype(np.float64) + pulse_position).astype(np.int64)
+        ts = (pulse_ticks.astype(np.float64) + pulse_position).astype(np.int64)
         ts.sort()
         return ts
 
