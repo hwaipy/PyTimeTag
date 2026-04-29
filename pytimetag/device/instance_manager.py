@@ -181,15 +181,37 @@ class DeviceInstanceManager:
             device.start = _wrapped_start
             device.stop = _wrapped_stop
 
+            # CH00–CH03: explicit defaults; CH04+ Random 50 kHz (rates as in TimeTagSimulator).
             device.set_channel(
                 0,
                 mode="Period",
-                period_count=5_000,
+                period_count=25_000,
                 dead_time_s=10e-9,
                 threshold_voltage=0.5,
                 reference_pulse_v=1.0,
             )
-            for ch_idx in range(1, device.channel_count):
+            if device.channel_count > 1:
+                device.set_channel(
+                    1,
+                    mode="Period",
+                    period_count=1,
+                    dead_time_s=10e-9,
+                    threshold_voltage=0.5,
+                    reference_pulse_v=1.0,
+                )
+            for ch_idx in (2, 3):
+                if ch_idx >= device.channel_count:
+                    break
+                device.set_channel(
+                    ch_idx,
+                    mode="Pulse",
+                    pulse_count=100_000_000,
+                    pulse_events=120_000,
+                    dead_time_s=10e-9,
+                    threshold_voltage=0.5,
+                    reference_pulse_v=1.0,
+                )
+            for ch_idx in range(4, device.channel_count):
                 device.set_channel(
                     ch_idx,
                     mode="Random",

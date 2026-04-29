@@ -78,9 +78,9 @@ class AcquisitionService:
         self._hist.turnOn(
             {
                 "Sync": 0,
-                "Signals": list(range(1, min(channel_count, 16))),
-                "ViewStart": -100000,
-                "ViewStop": 100000,
+                "Signals": [2, 3],
+                "ViewStart": 0,
+                "ViewStop": 40000000,
                 "BinCount": 1000,
                 "Divide": 1,
             }

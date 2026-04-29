@@ -9,6 +9,7 @@
             v-for="ch in channelIds"
             :key="ch"
             class="count-row"
+            :class="{ 'count-row-sync': ch === currentSyncChannel }"
           >
             <span class="count-label">CH{{ String(ch).padStart(2, '0') }}</span>
             <span class="count-value">{{ formatCount(latestCounts[ch] ?? 0) }}</span>
@@ -27,12 +28,94 @@
 
       <!-- Right: Charts placeholder + controls -->
       <div class="charts-panel">
-        <div class="apple-card chart-card">
+        <div class="apple-card chart-card rate-chart-card">
           <div class="chart-header">
             <span class="chart-title">Count Rate History</span>
             <span class="chart-subtitle">per channel · ~120 s from storage stream</span>
           </div>
           <div ref="rateChartEl" class="chart-container"></div>
+        </div>
+
+        <div class="apple-card chart-card hist-chart-card">
+          <div class="chart-header">
+            <span class="chart-title">Histograms</span>
+          </div>
+          <div class="hist-controls">
+            <div class="hist-controls-grid">
+              <label class="hist-control-item">
+                <span class="hist-control-label">Sync</span>
+                <input
+                  v-model.number="histDraft.Sync"
+                  type="number"
+                  min="0"
+                  :max="Math.max(0, channelCount - 1)"
+                  class="hist-control-input hist-control-input-sync"
+                  @keydown.enter.prevent="applyHistogramDraft"
+                  @keydown.esc.prevent="cancelHistogramField('Sync')"
+                  @blur="applyHistogramDraft"
+                />
+              </label>
+              <label class="hist-control-item">
+                <span class="hist-control-label">Signals (csv)</span>
+                <input
+                  v-model="histSignalsText"
+                  type="text"
+                  class="hist-control-input"
+                  placeholder="e.g. 2,3"
+                  @keydown.enter.prevent="applyHistogramDraft"
+                  @keydown.esc.prevent="cancelHistogramField('Signals')"
+                  @blur="applyHistogramDraft"
+                />
+              </label>
+              <label class="hist-control-item">
+                <span class="hist-control-label">ViewStart</span>
+                <input
+                  v-model.number="histDraft.ViewStart"
+                  type="number"
+                  class="hist-control-input"
+                  @keydown.enter.prevent="applyHistogramDraft"
+                  @keydown.esc.prevent="cancelHistogramField('ViewStart')"
+                  @blur="applyHistogramDraft"
+                />
+              </label>
+              <label class="hist-control-item">
+                <span class="hist-control-label">ViewStop</span>
+                <input
+                  v-model.number="histDraft.ViewStop"
+                  type="number"
+                  class="hist-control-input"
+                  @keydown.enter.prevent="applyHistogramDraft"
+                  @keydown.esc.prevent="cancelHistogramField('ViewStop')"
+                  @blur="applyHistogramDraft"
+                />
+              </label>
+              <label class="hist-control-item">
+                <span class="hist-control-label">BinCount</span>
+                <input
+                  v-model.number="histDraft.BinCount"
+                  type="number"
+                  min="1"
+                  class="hist-control-input"
+                  @keydown.enter.prevent="applyHistogramDraft"
+                  @keydown.esc.prevent="cancelHistogramField('BinCount')"
+                  @blur="applyHistogramDraft"
+                />
+              </label>
+              <label class="hist-control-item">
+                <span class="hist-control-label">Divide</span>
+                <input
+                  v-model.number="histDraft.Divide"
+                  type="number"
+                  min="1"
+                  class="hist-control-input"
+                  @keydown.enter.prevent="applyHistogramDraft"
+                  @keydown.esc.prevent="cancelHistogramField('Divide')"
+                  @blur="applyHistogramDraft"
+                />
+              </label>
+            </div>
+          </div>
+          <div ref="histChartEl" class="chart-container"></div>
         </div>
       </div>
     </div>
@@ -65,6 +148,25 @@ const channelIds = computed(() => Array.from({ length: channelCount.value }, (_,
 const latestCounts = computed(() => store.latestCounts || {});
 const rateHistory = computed(() => store.metricsHistory || []);
 
+const histAnalyserState = computed(() => store.analyzers?.HistogramAnalyser);
+const histCfg = computed(() => histAnalyserState.value?.configuration || {});
+const currentSyncChannel = computed(() => {
+  const maxChannel = Math.max(0, channelCount.value - 1);
+  return toInt(histCfg.value.Sync, 0, 0, maxChannel);
+});
+const HIST_DEFAULT_CONFIG = {
+  Sync: 0,
+  Signals: [2, 3],
+  ViewStart: 0,
+  ViewStop: 40000000,
+  BinCount: 1000,
+  Divide: 1,
+};
+const histDraft = ref({ ...HIST_DEFAULT_CONFIG });
+const histSignalsText = ref(HIST_DEFAULT_CONFIG.Signals.join(','));
+const histAppliedDraft = ref({ ...HIST_DEFAULT_CONFIG });
+const histAppliedSignalsText = ref(HIST_DEFAULT_CONFIG.Signals.join(','));
+
 function formatNumber(num) {
   if (num === undefined || num === null) return '-';
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(num);
@@ -75,6 +177,96 @@ function formatCount(num) {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(num);
 }
 
+function toFiniteNumber(v, fallback) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toInt(v, fallback, minValue = null, maxValue = null) {
+  let n = Math.floor(Number(v));
+  if (!Number.isFinite(n)) n = fallback;
+  if (minValue !== null) n = Math.max(minValue, n);
+  if (maxValue !== null) n = Math.min(maxValue, n);
+  return n;
+}
+
+function parseSignalsText(value, maxChannel) {
+  const text = String(value || '').trim();
+  if (!text) return [];
+  const items = text
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => Number.parseInt(s, 10))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= maxChannel);
+  return [...new Set(items)];
+}
+
+function resetHistogramDraft() {
+  const state = histAnalyserState.value || {};
+  const cfg = state.configuration || {};
+  const maxChannel = Math.max(0, channelCount.value - 1);
+  histDraft.value = {
+    Sync: toInt(cfg.Sync, HIST_DEFAULT_CONFIG.Sync, 0, maxChannel),
+    Signals: Array.isArray(cfg.Signals) ? cfg.Signals : [...HIST_DEFAULT_CONFIG.Signals],
+    ViewStart: toFiniteNumber(cfg.ViewStart, HIST_DEFAULT_CONFIG.ViewStart),
+    ViewStop: toFiniteNumber(cfg.ViewStop, HIST_DEFAULT_CONFIG.ViewStop),
+    BinCount: toInt(cfg.BinCount, HIST_DEFAULT_CONFIG.BinCount, 1),
+    Divide: toInt(cfg.Divide, HIST_DEFAULT_CONFIG.Divide, 1),
+  };
+  histSignalsText.value = histDraft.value.Signals.join(',');
+  histAppliedDraft.value = { ...histDraft.value };
+  histAppliedSignalsText.value = histSignalsText.value;
+}
+
+function cancelHistogramField(fieldName) {
+  if (fieldName === 'Signals') {
+    histSignalsText.value = histAppliedSignalsText.value;
+    return;
+  }
+  if (Object.prototype.hasOwnProperty.call(histAppliedDraft.value, fieldName)) {
+    histDraft.value[fieldName] = histAppliedDraft.value[fieldName];
+  }
+}
+
+function normalizeHistogramDraft() {
+  const maxChannel = Math.max(0, channelCount.value - 1);
+  const sync = toInt(histDraft.value.Sync, HIST_DEFAULT_CONFIG.Sync, 0, maxChannel);
+  const signals = parseSignalsText(histSignalsText.value, maxChannel);
+  const viewStart = toFiniteNumber(histDraft.value.ViewStart, HIST_DEFAULT_CONFIG.ViewStart);
+  const viewStop = toFiniteNumber(histDraft.value.ViewStop, HIST_DEFAULT_CONFIG.ViewStop);
+  const binCount = toInt(histDraft.value.BinCount, HIST_DEFAULT_CONFIG.BinCount, 1);
+  const divide = toInt(histDraft.value.Divide, HIST_DEFAULT_CONFIG.Divide, 1);
+  return {
+    Sync: sync,
+    Signals: signals,
+    ViewStart: viewStart,
+    ViewStop: viewStop,
+    BinCount: binCount,
+    Divide: divide,
+  };
+}
+
+async function applyHistogramDraft() {
+  try {
+    const payload = normalizeHistogramDraft();
+    if (!(payload.ViewStop > payload.ViewStart)) {
+      resetHistogramDraft();
+      return;
+    }
+    const sameAsApplied = JSON.stringify(payload) === JSON.stringify(histAppliedDraft.value);
+    if (sameAsApplied && histSignalsText.value === histAppliedSignalsText.value) return;
+    await store.updateAnalyzer('HistogramAnalyser', true, payload);
+    histDraft.value = { ...payload };
+    histSignalsText.value = payload.Signals.join(',');
+    histAppliedDraft.value = { ...payload };
+    histAppliedSignalsText.value = histSignalsText.value;
+  } catch (err) {
+    console.error('Failed to apply histogram config:', err);
+    resetHistogramDraft();
+  }
+}
+
 const rateTimeFormatter = new Intl.DateTimeFormat([], {
   hourCycle: 'h23',
   hour: '2-digit',
@@ -83,7 +275,11 @@ const rateTimeFormatter = new Intl.DateTimeFormat([], {
 });
 
 const rateChartEl = ref(null);
+const histChartEl = ref(null);
 let rateChart = null;
+let histChart = null;
+/** Avoid clearing the histogram on transient empty SSE frames while the analyser stays on. */
+let histChartHasValidSeries = false;
 let tooltipMousePos = null;
 
 const channelColors = [
@@ -92,6 +288,9 @@ const channelColors = [
   '#ffcc00', '#a2845e', '#00c7be', '#007aff',
   '#34c759', '#ff9500', '#ff3b30', '#5856d6',
 ];
+
+/** Same grid as count-rate trace: adaptive width via containLabel + matching margins. */
+const TRACES_CHART_GRID = { left: 8, right: 8, top: 40, bottom: 30, containLabel: true };
 
 function initRateChart() {
   if (!rateChartEl.value) return;
@@ -103,9 +302,10 @@ function initRateChart() {
     tooltipMousePos = null;
   });
   rateChart.setOption({
+    animation: false,
     backgroundColor: 'transparent',
     textStyle: { fontFamily: '-apple-system, BlinkMacSystemFont, SF Pro Text, sans-serif' },
-    grid: { left: 8, right: 8, top: 40, bottom: 30, containLabel: true },
+    grid: { ...TRACES_CHART_GRID },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(255,255,255,0.95)',
@@ -178,20 +378,182 @@ function updateRateChart() {
 
 watch(rateHistory, updateRateChart, { deep: true });
 
+function binCenters(viewStart, viewStop, binCount) {
+  if (!Number.isFinite(viewStart) || !Number.isFinite(viewStop) || binCount < 1) return [];
+  const w = viewStop - viewStart;
+  return Array.from({ length: binCount }, (_, i) => viewStart + (i + 0.5) * (w / binCount));
+}
+
+function initHistChart() {
+  if (!histChartEl.value) return;
+  histChart = echarts.init(histChartEl.value);
+  histChart.setOption({
+    animation: false,
+    backgroundColor: 'transparent',
+    textStyle: { fontFamily: '-apple-system, BlinkMacSystemFont, SF Pro Text, sans-serif' },
+    grid: { ...TRACES_CHART_GRID },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: 'rgba(0,0,0,0.08)',
+      textStyle: { color: '#1d1d1f', fontSize: 12 },
+      extraCssText: 'max-width: 320px;',
+    },
+    legend: {
+      type: 'scroll',
+      top: 0,
+      right: 8,
+      icon: 'roundRect',
+      itemWidth: 12,
+      itemHeight: 3,
+      textStyle: { color: 'rgba(0,0,0,0.6)', fontSize: 11 },
+    },
+    xAxis: {
+      type: 'value',
+      axisLine: { lineStyle: { color: 'rgba(0,0,0,0.15)' } },
+      axisLabel: { color: 'rgba(0,0,0,0.5)', fontSize: 11 },
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: 'rgba(0,0,0,0.06)' } },
+      axisLabel: { color: 'rgba(0,0,0,0.5)', fontSize: 11 },
+    },
+    series: [],
+  });
+}
+
+function updateHistChart() {
+  if (!histChart) return;
+  const payload = store.latestHistogramAnalyser;
+  const enabled = histAnalyserState.value?.enabled === true;
+  const vs = Number(histCfg.value.ViewStart ?? -100000);
+  const ve = Number(histCfg.value.ViewStop ?? 100000);
+  const bc = Math.max(1, Math.floor(Number(histCfg.value.BinCount ?? 1000)));
+  const signals = Array.isArray(histCfg.value.Signals) ? histCfg.value.Signals : [];
+
+  if (!enabled) {
+    histChartHasValidSeries = false;
+    histChart.setOption({
+      animation: false,
+      grid: { ...TRACES_CHART_GRID },
+      xAxis: { min: vs, max: ve, show: true },
+      yAxis: { min: 0 },
+      series: [],
+      graphic: [],
+    });
+    return;
+  }
+
+  if (!payload?.Histograms?.length) {
+    if (histChartHasValidSeries) return;
+    histChart.setOption({
+      animation: false,
+      grid: { ...TRACES_CHART_GRID },
+      xAxis: { min: vs, max: ve, show: true },
+      yAxis: { min: 0 },
+      series: [],
+      graphic: [],
+    });
+    return;
+  }
+
+  const hists = payload.Histograms;
+  const first = hists[0];
+  if (Array.isArray(first) && first.length > 0 && first[0] === -1) {
+    histChartHasValidSeries = false;
+    histChart.setOption({
+      animation: false,
+      grid: { ...TRACES_CHART_GRID },
+      xAxis: { min: vs, max: ve },
+      yAxis: {},
+      series: [],
+      graphic: [
+        {
+          type: 'text',
+          left: 'center',
+          top: 'middle',
+          style: {
+            text: 'Invalid histogram (trigger load / overload)',
+            fill: '#d32f2f',
+            fontSize: 13,
+          },
+        },
+      ],
+    });
+    return;
+  }
+
+  const centers = binCenters(vs, ve, bc);
+  const series = [];
+  for (let si = 0; si < hists.length; si++) {
+    const arr = hists[si];
+    if (!Array.isArray(arr) || arr.length === 0) continue;
+    const n = Math.min(arr.length, centers.length);
+    const ch = signals[si] ?? si;
+    const data = [];
+    for (let i = 0; i < n; i++) {
+      data.push([centers[i], arr[i]]);
+    }
+    series.push({
+      name: `CH${String(ch).padStart(2, '0')}`,
+      type: 'line',
+      step: 'middle',
+      showSymbol: false,
+      lineStyle: { width: 1.2 },
+      itemStyle: { color: channelColors[ch % channelColors.length] },
+      data,
+    });
+  }
+
+  histChartHasValidSeries = series.length > 0;
+  histChart.setOption({
+    animation: false,
+    grid: { ...TRACES_CHART_GRID },
+    graphic: [],
+    xAxis: { min: vs, max: ve },
+    yAxis: { min: 0 },
+    series,
+  });
+}
+
+watch(
+  () => store.latestHistogramAnalyser,
+  () => updateHistChart(),
+  { deep: true }
+);
+watch(histCfg, () => updateHistChart(), { deep: true });
+watch(histAnalyserState, () => updateHistChart(), { deep: true });
+watch(histAnalyserState, () => resetHistogramDraft(), { deep: true, immediate: true });
+
+function onResizeCharts() {
+  rateChart?.resize();
+  histChart?.resize();
+}
+
 onMounted(async () => {
   try {
     await store.fetchDevices();
+    await store.fetchAnalyzers();
     await nextTick();
     initRateChart();
-    window.addEventListener('resize', () => rateChart?.resize());
+    histChartHasValidSeries = false;
+    initHistChart();
+    updateHistChart();
+    window.addEventListener('resize', onResizeCharts);
   } catch (err) {
     console.error('TracesPage mount failed:', err);
   }
 });
 
 onUnmounted(() => {
+  window.removeEventListener('resize', onResizeCharts);
   rateChart?.dispose();
   rateChart = null;
+  histChart?.dispose();
+  histChart = null;
+  histChartHasValidSeries = false;
 });
 </script>
 
@@ -210,7 +572,7 @@ onUnmounted(() => {
 }
 
 .counts-panel {
-  background: white;
+  background: #fff;
   padding: 12px;
   border-radius: 12px;
   width: auto;
@@ -236,9 +598,14 @@ onUnmounted(() => {
   gap: 4px;
   padding: 6px 8px;
   background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 8px;
   font-family: 'SF Mono', Monaco, 'Courier New', monospace;
   font-variant-numeric: tabular-nums;
+}
+
+.count-row-sync {
+  box-shadow: inset 3px 0 0 #ff9500;
 }
 
 .count-label {
@@ -290,7 +657,7 @@ onUnmounted(() => {
 .delay-input:focus {
   outline: none;
   border-color: #0071e3;
-  background: rgba(255, 255, 255, 0.6);
+  background: transparent;
 }
 
 .count-unit {
@@ -311,6 +678,14 @@ onUnmounted(() => {
   padding: 16px;
   background: transparent;
   border-radius: 12px;
+}
+
+.rate-chart-card {
+  background: #fff;
+}
+
+.hist-chart-card {
+  background: #fff;
 }
 
 .chart-header {
@@ -334,6 +709,64 @@ onUnmounted(() => {
 .chart-container {
   width: 100%;
   height: 260px;
+}
+
+.hist-controls {
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.hist-controls-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.hist-control-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-control-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d1d1f;
+  white-space: nowrap;
+}
+
+.hist-control-input {
+  width: 8ch;
+  min-width: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: transparent;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: #1d1d1f;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.hist-control-input::-webkit-inner-spin-button,
+.hist-control-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.hist-control-input-sync {
+  width: calc(8ch * 0.6);
 }
 
 @media (max-width: 900px) {

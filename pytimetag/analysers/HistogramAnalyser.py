@@ -12,9 +12,9 @@ class HistogramAnalyser(Analyser):
     super().__init__()
     self.channelCount = channelCount
     self.setConfiguration("Sync", 0, Validator.int(0, channelCount - 1))
-    self.setConfiguration("Signals", [1], Validator.intList(0, channelCount - 1))
-    self.setConfiguration("ViewStart", -100000, Validator.float())
-    self.setConfiguration("ViewStop", 100000, Validator.float())
+    self.setConfiguration("Signals", [2, 3], Validator.intList(0, channelCount - 1))
+    self.setConfiguration("ViewStart", 0, Validator.float())
+    self.setConfiguration("ViewStop", 40000000, Validator.float())
     self.setConfiguration("BinCount", 1000, Validator.int(1, 10000))
     self.setConfiguration("Divide", 1, Validator.int(min=1))
 

@@ -39,7 +39,7 @@ start-frontend:
 # ---------------------------------------------------------------------------
 stop:
 	@echo "Killing backend ..."
-	@-pkill -f "python3.*pytimetag gui" 2>/dev/null && echo "  backend killed" || echo "  backend not running"
+	@-pkill -f "[p]ytimetag gui" 2>/dev/null && echo "  backend killed" || echo "  backend not running"
 	@echo "Killing frontend ..."
 	@-pkill -f "npm run dev" 2>/dev/null && echo "  frontend killed" || echo "  frontend not running"
 	@-pkill -f "quasar dev" 2>/dev/null && echo "  quasar killed" || true
