@@ -61,6 +61,18 @@ export const useRuntimeStore = defineStore("runtime", {
       const res = await this._request(`${API_BASE}/session/status`);
       this.session = await res.json();
     },
+    async fetchChannelDelays() {
+      const res = await this._request(`${API_BASE}/acquisition/channel_delays`);
+      return await res.json();
+    },
+    async putChannelDelays(delays_ps) {
+      const res = await this._request(`${API_BASE}/acquisition/channel_delays`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delays_ps }),
+      });
+      return await res.json();
+    },
     async fetchDatablocks(limit = this.datablocksLimit) {
       this.datablocksLimit = limit;
       const res = await this._request(`${API_BASE}/datablocks?limit=${this.datablocksLimit}`);

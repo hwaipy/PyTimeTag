@@ -6,14 +6,14 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 import duckdb
 
 from pytimetag.analysers.CounterAnalyser import CounterAnalyser
 from pytimetag.analysers.HistogramAnalyser import HistogramAnalyser
 from pytimetag.datablock import DataBlock
-from pytimetag.device.Simulator import unpack_timetag
+from pytimetag.device.Simulator import MAX_PACKED_CHANNELS, unpack_timetag
 from pytimetag.device.datablock_packer import (
     DataBlockPackerPath,
     DataBlockStreamPacker,
@@ -35,6 +35,7 @@ class AcquisitionService:
         log_cb: Callable[[str, str], None],
         save_raw_data: bool = False,
         storage_stream_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+        channel_delays_ps: Optional[Sequence[float]] = None,
     ) -> None:
         self._stream_paths = stream_paths
         self._channel_count = channel_count
@@ -57,7 +58,7 @@ class AcquisitionService:
         self._recent_rates = deque(maxlen=5)
         self._packer = DataBlockStreamPacker(
             [
-                DataBlockPackerPath(cfg.name, split, channel_count=16, resolution=resolution)
+                DataBlockPackerPath(cfg.name, split, channel_count=MAX_PACKED_CHANNELS, resolution=resolution)
                 for cfg in stream_paths
             ]
         )
@@ -89,6 +90,49 @@ class AcquisitionService:
         self._rate_history: deque[Dict[str, Any]] = deque(maxlen=200)
         self._last_block_time: Optional[float] = None
         self._block_intervals: deque[float] = deque(maxlen=100)
+        self._channel_delays_ps: List[float] = self._normalize_delays_ps(channel_delays_ps, MAX_PACKED_CHANNELS)
+
+    @staticmethod
+    def _normalize_delays_ps(values: Optional[Sequence[float]], width: int) -> List[float]:
+        out = [0.0] * width
+        if not values:
+            return out
+        for i in range(min(width, len(values))):
+            try:
+                out[i] = float(values[i])
+            except (TypeError, ValueError):
+                out[i] = 0.0
+        return out
+
+    def get_channel_delays_ps(self) -> List[float]:
+        with self._lock:
+            return list(self._channel_delays_ps)
+
+    def set_channel_delays_ps(self, values: Sequence[float]) -> None:
+        normalized = self._normalize_delays_ps(values, MAX_PACKED_CHANNELS)
+        with self._lock:
+            self._channel_delays_ps = normalized
+
+    def _block_for_analysers(self, block: DataBlock) -> DataBlock:
+        n = len(block.content)
+        if n == 0:
+            return block
+        res = float(block.resolution)
+        if res <= 0:
+            return block
+        with self._lock:
+            delays_ps = self._channel_delays_ps
+        tick_delays: List[int] = []
+        any_nonzero = False
+        for i in range(n):
+            ps = float(delays_ps[i]) if i < len(delays_ps) else 0.0
+            dt = int(round(ps * 1e-12 / res))
+            tick_delays.append(dt)
+            if dt != 0:
+                any_nonzero = True
+        if not any_nonzero:
+            return block
+        return block.synced(tick_delays)
 
     @property
     def default_path_name(self) -> str:
@@ -216,12 +260,13 @@ class AcquisitionService:
                     out = self._ensure_output_path(block, path_cfg["datablock_dir"])
                     out.write_bytes(payload)
                 analyser_rows: List[tuple[str, dict]] = []
-                counter_res = self._counter.dataIncome(block)
+                analyser_block = self._block_for_analysers(block)
+                counter_res = self._counter.dataIncome(analyser_block)
                 analyser_rows.append(("CounterAnalyser", counter_res))
                 hist_res: Dict[str, Any] = {}
                 if self._hist.isTurnedOn():
                     try:
-                        hist_res = self._hist.dataIncome(block)
+                        hist_res = self._hist.dataIncome(analyser_block)
                         analyser_rows.append(("HistogramAnalyser", hist_res))
                         self._hist_last_error = ""
                     except BaseException as exc:

@@ -6,7 +6,7 @@ from typing import List, Optional
 import uvicorn
 
 from pytimetag.gui.api import create_app
-from pytimetag.gui.config import GuiConfig, StreamPathConfig
+from pytimetag.gui.config import GuiConfig, StreamPathConfig, parse_channel_delays_ps_csv
 
 
 def _create_app_from_env():
@@ -28,6 +28,7 @@ def _set_env_from_config(config: GuiConfig) -> None:
     os.environ["PYTIMETAG_SPLIT_MODE"] = config.split_mode
     os.environ["PYTIMETAG_SPLIT_S"] = str(config.split_s)
     os.environ["PYTIMETAG_SPLIT_CHANNEL"] = str(config.split_channel)
+    os.environ["PYTIMETAG_CHANNEL_DELAYS_PS"] = ",".join(str(x) for x in config.channel_delays_ps)
     if config.stream_paths:
         paths_str = ";".join(
             f"{p.name}:{p.storage_db}:{p.datablock_dir}" for p in config.stream_paths
@@ -43,6 +44,7 @@ def run_gui_server(
     reload: bool = False,
     serve_web: bool | None = None,
     stream_paths: Optional[List[StreamPathConfig]] = None,
+    channel_delays_ps: str | None = None,
 ) -> None:
     config = GuiConfig.from_env()
     kwargs = {
@@ -61,6 +63,7 @@ def run_gui_server(
         "split_mode": config.split_mode,
         "split_s": config.split_s,
         "split_channel": config.split_channel,
+        "channel_delays_ps": config.channel_delays_ps,
     }
     if host is not None:
         kwargs["host"] = host
@@ -70,6 +73,8 @@ def run_gui_server(
         kwargs["serve_web"] = serve_web
     if stream_paths is not None:
         kwargs["stream_paths"] = stream_paths
+    if channel_delays_ps is not None:
+        kwargs["channel_delays_ps"] = parse_channel_delays_ps_csv(channel_delays_ps)
     config = GuiConfig(**kwargs)
     if reload:
         _set_env_from_config(config)

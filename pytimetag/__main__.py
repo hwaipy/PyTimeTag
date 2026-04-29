@@ -195,6 +195,11 @@ def main() -> None:
         gui_parser.add_argument("--split-mode", choices=["time", "channel"], default="time", help="DataBlock split mode (default: %(default)s)")
         gui_parser.add_argument("--split-s", type=float, default=1.0, help="Split window in seconds for time mode (default: %(default)s)")
         gui_parser.add_argument("--split-channel", type=int, default=0, help="Trigger channel for channel mode (default: %(default)s)")
+        gui_parser.add_argument(
+            "--channel-delays-ps",
+            default="",
+            help="Comma-separated per-channel delays in picoseconds (16 packed channels). Overrides PYTIMETAG_CHANNEL_DELAYS_PS when non-empty.",
+        )
         gui_args = gui_parser.parse_args(sys.argv[2:])
 
         stream_paths: List[StreamPathConfig] = []
@@ -213,6 +218,7 @@ def main() -> None:
             reload=gui_args.reload,
             serve_web=not gui_args.no_web,
             stream_paths=stream_paths or None,
+            channel_delays_ps=gui_args.channel_delays_ps.strip() or None,
         )
         return
 

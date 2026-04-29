@@ -3,7 +3,27 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
+
+from pytimetag.device.Simulator import MAX_PACKED_CHANNELS
+
+
+def parse_channel_delays_ps_csv(raw: str, width: int = MAX_PACKED_CHANNELS) -> Tuple[float, ...]:
+    """Parse comma-separated per-channel delays in picoseconds; pad or truncate to ``width``."""
+    raw = (raw or "").strip()
+    if not raw:
+        return tuple(0.0 for _ in range(width))
+    parts = [p.strip() for p in raw.split(",")]
+    out: List[float] = []
+    for i in range(width):
+        if i < len(parts) and parts[i]:
+            try:
+                out.append(float(parts[i]))
+            except ValueError:
+                out.append(0.0)
+        else:
+            out.append(0.0)
+    return tuple(out)
 
 
 @dataclass(frozen=True)
@@ -30,6 +50,9 @@ class GuiConfig:
     split_mode: str = "time"
     split_s: float = 1.0
     split_channel: int = 0
+    channel_delays_ps: Tuple[float, ...] = field(
+        default_factory=lambda: tuple(0.0 for _ in range(MAX_PACKED_CHANNELS))
+    )
 
     @classmethod
     def from_env(cls) -> "GuiConfig":
@@ -63,6 +86,7 @@ class GuiConfig:
             split_mode=os.getenv("PYTIMETAG_SPLIT_MODE", "time"),
             split_s=float(os.getenv("PYTIMETAG_SPLIT_S", "1.0")),
             split_channel=int(os.getenv("PYTIMETAG_SPLIT_CHANNEL", "0")),
+            channel_delays_ps=parse_channel_delays_ps_csv(os.getenv("PYTIMETAG_CHANNEL_DELAYS_PS", "")),
         )
 
     @property

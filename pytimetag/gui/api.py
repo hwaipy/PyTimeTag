@@ -37,6 +37,10 @@ class ConfigureAnalyserRequest(BaseModel):
     config: Optional[Dict[str, Any]] = None
 
 
+class ChannelDelaysPsUpdateRequest(BaseModel):
+    delays_ps: List[float]
+
+
 class ChannelConfigRequest(BaseModel):
     dead_time_s: Optional[float] = None
     threshold_voltage: Optional[float] = None
@@ -220,6 +224,7 @@ def create_app(config: GuiConfig) -> FastAPI:
         log_cb=append_log,
         save_raw_data=config.save_raw_data,
         storage_stream_cb=_analyser_storage_stream_broadcast,
+        channel_delays_ps=list(config.channel_delays_ps),
     )
 
     @app.on_event("startup")
@@ -292,6 +297,16 @@ def create_app(config: GuiConfig) -> FastAPI:
     @app.get("/api/v1/session/status")
     async def session_status() -> Dict[str, Any]:
         return acquisition.snapshot_metrics()
+
+    @app.get("/api/v1/acquisition/channel_delays")
+    async def get_acquisition_channel_delays() -> Dict[str, Any]:
+        return {"delays_ps": acquisition.get_channel_delays_ps()}
+
+    @app.put("/api/v1/acquisition/channel_delays")
+    async def put_acquisition_channel_delays(body: ChannelDelaysPsUpdateRequest) -> Dict[str, Any]:
+        acquisition.set_channel_delays_ps(body.delays_ps)
+        append_log("info", "Acquisition channel delays (ps) updated")
+        return {"delays_ps": acquisition.get_channel_delays_ps()}
 
     @app.get("/api/v1/rates")
     async def get_rates(limit: int = 100) -> Dict[str, Any]:

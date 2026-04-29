@@ -15,18 +15,19 @@
             }"
             @click="toggleSignalChannel(ch)"
           >
-            <span class="count-label">CH{{ String(ch).padStart(2, '0') }}</span>
-            <span class="count-value">{{ formatCount(latestCounts[ch] ?? 0) }}</span>
-            <span class="count-at">&nbsp;@&nbsp;</span>
+            <span class="count-label" @click.stop="toggleSignalChannel(ch)">CH{{ String(ch).padStart(2, '0') }}</span>
+            <span class="count-value" @click.stop="toggleSignalChannel(ch)">{{ formatCount(latestCounts[ch] ?? 0) }}</span>
+            <span class="count-at" @click.stop="toggleSignalChannel(ch)">&nbsp;@&nbsp;</span>
             <input
-              v-model="channelDelays[ch]"
+              v-model.number="channelDelays[ch]"
               type="number"
               class="delay-input"
               step="any"
               @click.stop
-              @blur="channelDelays[ch] = parseFloat(channelDelays[ch]) || 0"
+              @input="schedulePushChannelDelays"
+              @blur="onChannelDelayBlur(ch)"
             />
-            <span class="count-unit">ns</span>
+            <span class="count-unit" @click.stop="toggleSignalChannel(ch)">ns</span>
           </div>
         </div>
       </div>
@@ -134,7 +135,9 @@ import { useRuntimeStore } from '../stores/runtime';
 
 const store = useRuntimeStore();
 
-const channelDelays = ref(Array.from({ length: 16 }, () => 0));
+const PACKED_CHANNEL_COUNT = 16;
+
+const channelDelays = ref(Array.from({ length: PACKED_CHANNEL_COUNT }, () => 0));
 
 const channelCount = computed(() => {
   const device = store.devices?.[0];
@@ -274,6 +277,51 @@ async function applyHistogramDraft() {
     console.error('Failed to apply histogram config:', err);
     resetHistogramDraft();
   }
+}
+
+async function loadChannelDelaysFromBackend() {
+  try {
+    const data = await store.fetchChannelDelays();
+    const ps = data.delays_ps || [];
+    channelDelays.value = Array.from({ length: PACKED_CHANNEL_COUNT }, (_, i) =>
+      ps[i] != null ? Number(ps[i]) / 1000 : 0,
+    );
+  } catch (err) {
+    console.error('Failed to load channel delays:', err);
+  }
+}
+
+/** Debounced PUT so delay reaches the backend without relying only on blur. */
+let channelDelaySaveTimer = null;
+
+function schedulePushChannelDelays() {
+  if (channelDelaySaveTimer != null) clearTimeout(channelDelaySaveTimer);
+  channelDelaySaveTimer = setTimeout(() => {
+    channelDelaySaveTimer = null;
+    flushChannelDelaysToBackend();
+  }, 280);
+}
+
+async function flushChannelDelaysToBackend() {
+  const delays_ps = Array.from(
+    { length: PACKED_CHANNEL_COUNT },
+    (_, i) => (Number(channelDelays.value[i]) || 0) * 1000,
+  );
+  try {
+    await store.putChannelDelays(delays_ps);
+  } catch (err) {
+    console.error('Failed to save channel delays:', err);
+  }
+}
+
+function onChannelDelayBlur(ch) {
+  const v = Number(channelDelays.value[ch]);
+  channelDelays.value[ch] = Number.isFinite(v) ? v : 0;
+  if (channelDelaySaveTimer != null) {
+    clearTimeout(channelDelaySaveTimer);
+    channelDelaySaveTimer = null;
+  }
+  flushChannelDelaysToBackend();
 }
 
 async function toggleSignalChannel(channel) {
@@ -509,11 +557,14 @@ function updateHistChart() {
 
   const centers = binCenters(vs, ve, bc);
   const series = [];
-  for (let si = 0; si < selectedSignals.length; si++) {
+  const appliedOrder = Array.isArray(histCfg.value.Signals) ? histCfg.value.Signals : [];
+  const show = new Set(selectedSignals);
+  for (let si = 0; si < appliedOrder.length; si++) {
+    const ch = appliedOrder[si];
+    if (!show.has(ch)) continue;
     const arr = hists[si];
     if (!Array.isArray(arr) || arr.length === 0) continue;
     const n = Math.min(arr.length, centers.length);
-    const ch = selectedSignals[si];
     const data = [];
     for (let i = 0; i < n; i++) {
       data.push([centers[i], arr[i]]);
@@ -559,6 +610,7 @@ onMounted(async () => {
   try {
     await store.fetchDevices();
     await store.fetchAnalyzers();
+    await loadChannelDelaysFromBackend();
     await nextTick();
     initRateChart();
     histChartHasValidSeries = false;
@@ -571,6 +623,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  if (channelDelaySaveTimer != null) {
+    clearTimeout(channelDelaySaveTimer);
+    channelDelaySaveTimer = null;
+  }
   window.removeEventListener('resize', onResizeCharts);
   rateChart?.dispose();
   rateChart = null;
@@ -627,6 +683,7 @@ onUnmounted(() => {
   overflow: hidden;
   font-family: 'SF Mono', Monaco, 'Courier New', monospace;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
 
 .count-row-sync {
