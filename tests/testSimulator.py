@@ -344,6 +344,38 @@ class SimulatorTest(unittest.TestCase):
         self.assertTrue(np.all(t2 % P == 0))
         self.assertEqual(int(t2.min()), int(t1.max()) + P)
 
+    def test_pulse_hz_global_grid_across_batches(self):
+        """Pulse mode should also stay on a fixed global phase grid when sigma is zero."""
+        received = []
+
+        sim = TimeTagSimulator(
+            lambda a: received.append(a.copy()),
+            resolution=1e-12,
+            update_interval_range_s=(1.0, 1.0),
+            seed=3,
+            realtime_pacing=False,
+        )
+        sim.set_channel(
+            2,
+            mode='Pulse',
+            pulse_count=10,
+            pulse_events=50,
+            pulse_sigma_s=0.0,
+            threshold_voltage=-1.0,
+            reference_pulse_v=1.0,
+        )
+        sim.step()
+        sim.step()
+        t1, c1 = unpack_timetag(received[0])
+        t2, c2 = unpack_timetag(received[1])
+        tc1 = t1[c1 == 2]
+        tc2 = t2[c2 == 2]
+        self.assertGreater(tc1.size, 0)
+        self.assertGreater(tc2.size, 0)
+        P = int(round(1.0 / (10.0 * 1e-12)))
+        self.assertTrue(np.all(tc1 % P == 0))
+        self.assertTrue(np.all(tc2 % P == 0))
+
     def test_integration_long_run_monotonic_and_datablock_stats(self):
         """
         Run the simulator ~2.5 s wall time with 50–80 ms lab windows per batch, merge batches,

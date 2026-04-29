@@ -73,8 +73,9 @@ class ChannelSettings:
     In :class:`TimeTagSimulator`, ``period_count`` and ``random_count`` are **rates in Hz**
     (events per second of lab time). Each batch uses ``round(rate * Δt)`` events, where ``Δt`` is
     the simulated window width in seconds. ``Period`` places events on a **global** grid
-    ``…, 0, P, 2P, …`` ticks so timing stays coherent across batches. ``Pulse`` mode keeps
-    ``pulse_count`` / ``pulse_events`` as **per-batch** totals (same idea as :meth:`DataBlock.generate`).
+    ``…, 0, P, 2P, …`` ticks so timing stays coherent across batches. ``Pulse`` mode treats
+    ``pulse_count`` / ``pulse_events`` as **rates in Hz** and uses a global pulse train (fixed phase
+    across batches) plus optional Gaussian jitter.
     ``pulse_sigma_s`` is the Gaussian jitter standard deviation in **seconds** (converted to ticks
     via ``sigma_ticks = pulse_sigma_s / resolution``).
     """
@@ -132,8 +133,8 @@ class TimeTagSimulator(TimeTagDevice):
 
     ``period_count`` and ``random_count`` are **event rates in Hz** (lab time). Each batch uses
     ``round(rate * Δt_lab)`` random draws or, for Period, samples of a **global** grid so phases stay
-    aligned across batches. ``Pulse`` mode still uses ``pulse_count`` / ``pulse_events`` as counts
-    **per batch** (unchanged from ``DataBlock.generate``).
+    aligned across batches. ``Pulse`` mode uses a global pulse grid (rate = ``pulse_count``) and
+    draws ``round(pulse_events * Δt_lab)`` events around that grid.
 
     **Update rate (single knob):** ``update_interval_range_s`` draws a lab window width Δt (seconds)
     each tick; that becomes ``span_ticks = max(1, round(Δt / resolution))`` simulated ticks per push.
@@ -384,7 +385,7 @@ class TimeTagSimulator(TimeTagDevice):
         return raw
 
     def _synthesize_pulse_ticks(self, t0: int, t1: int, ch: ChannelSettings) -> np.ndarray:
-        """Pulse mode: ``pulse_count`` and ``pulse_events`` are per-second rates."""
+        """Pulse mode on a global phase-locked grid, with optional Gaussian timing jitter."""
         span_ticks = t1 - t0
         if span_ticks <= 0:
             return np.array([], dtype=np.int64)
@@ -394,10 +395,13 @@ class TimeTagSimulator(TimeTagDevice):
         sigma_ticks = float(ch.pulse_sigma_s) / self.resolution
         if pulse_count < 1 or event_count < 1:
             return np.array([], dtype=np.int64)
-        period = float(span_ticks) / pulse_count
-        pulse_indices = self._rng.integers(0, pulse_count, size=event_count, endpoint=False)
+        pulse_rate_hz = float(ch.pulse_count)
+        centers = self._synthesize_period_ticks(t0, t1, pulse_rate_hz)
+        if centers.size == 0:
+            return np.array([], dtype=np.int64)
+        pulse_indices = self._rng.integers(0, centers.size, size=event_count, endpoint=False)
         pulse_position = self._rng.normal(0.0, sigma_ticks, size=event_count)
-        ts = (t0 + pulse_indices.astype(np.float64) * period + pulse_position).astype(np.int64)
+        ts = (centers[pulse_indices].astype(np.float64) + pulse_position).astype(np.int64)
         ts.sort()
         return ts
 
