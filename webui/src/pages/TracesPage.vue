@@ -9,7 +9,11 @@
             v-for="ch in channelIds"
             :key="ch"
             class="count-row"
-            :class="{ 'count-row-sync': ch === currentSyncChannel }"
+            :class="{
+              'count-row-signal': signalChannels.includes(ch),
+              'count-row-sync': ch === currentSyncChannel,
+            }"
+            @click="toggleSignalChannel(ch)"
           >
             <span class="count-label">CH{{ String(ch).padStart(2, '0') }}</span>
             <span class="count-value">{{ formatCount(latestCounts[ch] ?? 0) }}</span>
@@ -19,6 +23,7 @@
               type="number"
               class="delay-input"
               step="any"
+              @click.stop
               @blur="channelDelays[ch] = parseFloat(channelDelays[ch]) || 0"
             />
             <span class="count-unit">ns</span>
@@ -154,6 +159,10 @@ const currentSyncChannel = computed(() => {
   const maxChannel = Math.max(0, channelCount.value - 1);
   return toInt(histCfg.value.Sync, 0, 0, maxChannel);
 });
+const signalChannels = computed(() => {
+  const maxChannel = Math.max(0, channelCount.value - 1);
+  return parseSignalsText(histSignalsText.value, maxChannel);
+});
 const HIST_DEFAULT_CONFIG = {
   Sync: 0,
   Signals: [2, 3],
@@ -265,6 +274,18 @@ async function applyHistogramDraft() {
     console.error('Failed to apply histogram config:', err);
     resetHistogramDraft();
   }
+}
+
+async function toggleSignalChannel(channel) {
+  const maxChannel = Math.max(0, channelCount.value - 1);
+  const ch = toInt(channel, 0, 0, maxChannel);
+  const current = parseSignalsText(histSignalsText.value, maxChannel);
+  const hasChannel = current.includes(ch);
+  const next = hasChannel ? current.filter((n) => n !== ch) : [...current, ch];
+  next.sort((a, b) => a - b);
+  histSignalsText.value = next.join(',');
+  histDraft.value.Signals = [...next];
+  await applyHistogramDraft();
 }
 
 const rateTimeFormatter = new Intl.DateTimeFormat([], {
@@ -428,10 +449,11 @@ function updateHistChart() {
   if (!histChart) return;
   const payload = store.latestHistogramAnalyser;
   const enabled = histAnalyserState.value?.enabled === true;
+  const maxChannel = Math.max(0, channelCount.value - 1);
+  const selectedSignals = parseSignalsText(histSignalsText.value, maxChannel);
   const vs = Number(histCfg.value.ViewStart ?? -100000);
   const ve = Number(histCfg.value.ViewStop ?? 100000);
   const bc = Math.max(1, Math.floor(Number(histCfg.value.BinCount ?? 1000)));
-  const signals = Array.isArray(histCfg.value.Signals) ? histCfg.value.Signals : [];
 
   if (!enabled) {
     histChartHasValidSeries = false;
@@ -442,7 +464,7 @@ function updateHistChart() {
       yAxis: { min: 0 },
       series: [],
       graphic: [],
-    });
+    }, { replaceMerge: ['series', 'graphic'] });
     return;
   }
 
@@ -455,7 +477,7 @@ function updateHistChart() {
       yAxis: { min: 0 },
       series: [],
       graphic: [],
-    });
+    }, { replaceMerge: ['series', 'graphic'] });
     return;
   }
 
@@ -481,17 +503,17 @@ function updateHistChart() {
           },
         },
       ],
-    });
+    }, { replaceMerge: ['series', 'graphic'] });
     return;
   }
 
   const centers = binCenters(vs, ve, bc);
   const series = [];
-  for (let si = 0; si < hists.length; si++) {
+  for (let si = 0; si < selectedSignals.length; si++) {
     const arr = hists[si];
     if (!Array.isArray(arr) || arr.length === 0) continue;
     const n = Math.min(arr.length, centers.length);
-    const ch = signals[si] ?? si;
+    const ch = selectedSignals[si];
     const data = [];
     for (let i = 0; i < n; i++) {
       data.push([centers[i], arr[i]]);
@@ -515,7 +537,7 @@ function updateHistChart() {
     xAxis: { min: vs, max: ve },
     yAxis: { min: 0 },
     series,
-  });
+  }, { replaceMerge: ['series', 'graphic'] });
 }
 
 watch(
@@ -523,6 +545,7 @@ watch(
   () => updateHistChart(),
   { deep: true }
 );
+watch(histSignalsText, () => updateHistChart());
 watch(histCfg, () => updateHistChart(), { deep: true });
 watch(histAnalyserState, () => updateHistChart(), { deep: true });
 watch(histAnalyserState, () => resetHistogramDraft(), { deep: true, immediate: true });
@@ -600,12 +623,33 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.03);
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 8px;
+  position: relative;
+  overflow: hidden;
   font-family: 'SF Mono', Monaco, 'Courier New', monospace;
   font-variant-numeric: tabular-nums;
 }
 
 .count-row-sync {
-  box-shadow: inset 3px 0 0 #ff9500;
+  box-shadow: none;
+}
+
+.count-row-signal::before,
+.count-row-sync::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  border-radius: 8px 0 0 8px;
+}
+
+.count-row-signal::before {
+  background: #34c759;
+}
+
+.count-row-sync::before {
+  background: #ff9500;
 }
 
 .count-label {
