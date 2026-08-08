@@ -2,7 +2,7 @@ import setuptools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
-version = '3.0.6'
+version = '4.0.0b1'
 
 setuptools.setup(
     name='pytimetag',
@@ -12,13 +12,13 @@ setuptools.setup(
     description='A data processing lib for TimeTag.',
     long_description=long_description,
     long_description_content_type="text/markdown",
-    license='gpl-3.0',
+    license='GPL-3.0-only',
     url='https://github.com/hwaipy/PyTimeTag',
     keywords=['timetag', 'physics'],
-    packages=setuptools.find_packages(),
-    include_package_data=True,
+    packages=setuptools.find_packages(exclude=("tests", "tests.*")),
+    include_package_data=False,
     package_data={
-        "pytimetag.gui": ["webui_dist/**/*"],
+        "pytimetag.gui": ["webui_dist/*", "webui_dist/assets/*"],
     },
     install_requires=[
         'numpy>=1.25',  # NumPy 2.x recommended
@@ -45,10 +45,9 @@ setuptools.setup(
         ],
     },
     classifiers=[
-        'Development Status :: 5 - Production/Stable',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Intended Audience :: End Users/Desktop',
-        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',

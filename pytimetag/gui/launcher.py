@@ -25,6 +25,12 @@ def _set_env_from_config(config: GuiConfig) -> None:
     os.environ["PYTIMETAG_DEVICE_TYPE"] = config.device_type
     os.environ["PYTIMETAG_DEVICE_SERIAL"] = config.device_serial
     os.environ["PYTIMETAG_DEVICE_CHANNEL_COUNT"] = str(config.device_channel_count)
+    if config.device_driver_path:
+        os.environ["PYTIMETAG_DEVICE_DRIVER_PATH"] = config.device_driver_path
+    else:
+        os.environ.pop("PYTIMETAG_DEVICE_DRIVER_PATH", None)
+    os.environ["PYTIMETAG_HARDWARE_BUFFER_SIZE"] = str(config.hardware_buffer_size)
+    os.environ["PYTIMETAG_HARDWARE_POLL_S"] = str(config.hardware_poll_s)
     os.environ["PYTIMETAG_SPLIT_MODE"] = config.split_mode
     os.environ["PYTIMETAG_SPLIT_S"] = str(config.split_s)
     os.environ["PYTIMETAG_SPLIT_CHANNEL"] = str(config.split_channel)
@@ -45,6 +51,12 @@ def run_gui_server(
     serve_web: bool | None = None,
     stream_paths: Optional[List[StreamPathConfig]] = None,
     channel_delays_ps: str | None = None,
+    device_type: str | None = None,
+    device_serial: str | None = None,
+    device_channel_count: int | None = None,
+    device_driver_path: str | None = None,
+    hardware_buffer_size: int | None = None,
+    hardware_poll_s: float | None = None,
 ) -> None:
     config = GuiConfig.from_env()
     kwargs = {
@@ -60,6 +72,9 @@ def run_gui_server(
         "device_type": config.device_type,
         "device_serial": config.device_serial,
         "device_channel_count": config.device_channel_count,
+        "device_driver_path": config.device_driver_path,
+        "hardware_buffer_size": config.hardware_buffer_size,
+        "hardware_poll_s": config.hardware_poll_s,
         "split_mode": config.split_mode,
         "split_s": config.split_s,
         "split_channel": config.split_channel,
@@ -75,6 +90,18 @@ def run_gui_server(
         kwargs["stream_paths"] = stream_paths
     if channel_delays_ps is not None:
         kwargs["channel_delays_ps"] = parse_channel_delays_ps_csv(channel_delays_ps)
+    if device_type is not None:
+        kwargs["device_type"] = device_type
+    if device_serial is not None:
+        kwargs["device_serial"] = device_serial
+    if device_channel_count is not None:
+        kwargs["device_channel_count"] = device_channel_count
+    if device_driver_path is not None:
+        kwargs["device_driver_path"] = device_driver_path
+    if hardware_buffer_size is not None:
+        kwargs["hardware_buffer_size"] = hardware_buffer_size
+    if hardware_poll_s is not None:
+        kwargs["hardware_poll_s"] = hardware_poll_s
     config = GuiConfig(**kwargs)
     if reload:
         _set_env_from_config(config)

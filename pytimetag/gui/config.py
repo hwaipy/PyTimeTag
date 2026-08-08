@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from pytimetag.device.Simulator import MAX_PACKED_CHANNELS
 
@@ -47,6 +47,9 @@ class GuiConfig:
     device_type: str = "simulator"
     device_serial: str = "simulator"
     device_channel_count: int = 16
+    device_driver_path: Optional[str] = None
+    hardware_buffer_size: int = int(1e6)
+    hardware_poll_s: float = 0.002
     split_mode: str = "time"
     split_s: float = 1.0
     split_channel: int = 0
@@ -83,6 +86,9 @@ class GuiConfig:
             device_type=os.getenv("PYTIMETAG_DEVICE_TYPE", "simulator"),
             device_serial=os.getenv("PYTIMETAG_DEVICE_SERIAL", "simulator"),
             device_channel_count=int(os.getenv("PYTIMETAG_DEVICE_CHANNEL_COUNT", "16")),
+            device_driver_path=os.getenv("PYTIMETAG_DEVICE_DRIVER_PATH") or None,
+            hardware_buffer_size=int(os.getenv("PYTIMETAG_HARDWARE_BUFFER_SIZE", "1000000")),
+            hardware_poll_s=float(os.getenv("PYTIMETAG_HARDWARE_POLL_S", "0.002")),
             split_mode=os.getenv("PYTIMETAG_SPLIT_MODE", "time"),
             split_s=float(os.getenv("PYTIMETAG_SPLIT_S", "1.0")),
             split_channel=int(os.getenv("PYTIMETAG_SPLIT_CHANNEL", "0")),

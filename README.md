@@ -5,7 +5,7 @@
 [![](https://img.shields.io/pypi/pyversions/pytimetag)](https://pypi.org/project/pytimetag/)
 [![Coverage badge](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hwaipy/PyTimeTag/python-coverage-comment-action-data/endpoint.json)](https://github.com/hwaipy/PyTimeTag/tree/python-coverage-comment-action-data)
 
-量子光学实验里常用 **时间标签（time tagging）** 记录单光子到达时刻与通道；PyTimeTag 提供 Python 库与命令行工具，覆盖时间戳的接收、分块（DataBlock）、序列化/落盘、简单监控与在线处理（含可选 DuckDB 落库）。已内置 **Swabian Instruments（Time Tagger）** 可选接入；无硬件时可用 **仿真**（`--source simulator`）。
+量子光学实验里常用 **时间标签（time tagging）** 记录单光子到达时刻与通道；PyTimeTag 提供 Python 库与命令行工具，覆盖时间戳的接收、分块（DataBlock）、序列化/落盘、简单监控与在线处理（含可选 DuckDB 落库）。已内置 **Swabian Instruments Time Tagger** 与 **SeruTek HSPCL6** 接入；无硬件时可用 **仿真**（`--source simulator`）。
 
 - **仓库**：<https://github.com/hwaipy/PyTimeTag>
 - **PyPI**：<https://pypi.org/project/pytimetag/>
@@ -50,11 +50,25 @@ make -C docs html-zh
 python -m pip install -U pytimetag
 ```
 
+4.0 测试版不会被普通安装命令自动选中。显式安装当前 beta：
+
+```bash
+python -m pip install "pytimetag==4.0.0b1"
+```
+
+若希望在 4.x 的后续预发布版本之间升级：
+
+```bash
+python -m pip install -U "pytimetag>=4.0.0b1,<5"
+```
+
 Swabian 硬件（可选）：
 
 ```bash
 python -m pip install -U "pytimetag[swabian]"
 ```
+
+SeruTek HSPCL6 使用 Python 标准库 `ctypes`，无需额外 Python 包；运行环境需要 Windows、厂商 USB 驱动和 `Tdc_Libusb_Dll.dll`。DLL 默认从厂商安装目录加载，也可用 `--driver-path` 或环境变量 `SERUTEK_TDC_DLL` 指定。
 
 从源码：
 
@@ -78,6 +92,7 @@ pytimetag --help
 
 ```bash
 pytimetag --source simulator
+pytimetag --source serutek --save --output-dir ./serutek_data
 pytimetag --save --output-dir ./my_data
 pytimetag --save --storage-db ./analytics/run.duckdb
 ```
@@ -95,6 +110,14 @@ pytimetag --save --storage-db ./analytics/run.duckdb
 ```bash
 pytimetag gui --host 127.0.0.1 --port 8787
 ```
+
+在连接 HSPCL6 的 Windows 主机上启动 SeruTek GUI，并允许局域网访问：
+
+```bash
+pytimetag gui --device serutek --host 0.0.0.0 --port 8787
+```
+
+SeruTek 默认使用 `USB0`、6 个通道、4194304 事件缓冲和 0.2 秒轮询。GUI 的设备页支持实时查看计数率、调整阈值以及启用/屏蔽通道；HSPCL6 不支持通用的六通道 dead-time 设置。
 
 离线任务使用 Celery，需单独启动 worker（默认 Redis）：
 
@@ -178,10 +201,11 @@ docker compose up --build
 
 ## 作为库使用
 
-安装后可 `import pytimetag`，使用 `DataBlock`、`device_type_manager`、`TimeTagSimulator` 等。Swabian 设备类需从子模块导入（不会随 `import pytimetag.device` 自动加载）：
+安装后可 `import pytimetag`，使用 `DataBlock`、`device_type_manager`、`TimeTagSimulator` 等。硬件设备类需从子模块导入（不会随 `import pytimetag.device` 自动加载）：
 
 ```python
 from pytimetag.device.SwabianTimeTag import SwabianTimeTag
+from pytimetag.device.SerutekTimeTag import SerutekTimeTag
 ```
 
 API 由 Sphinx AutoAPI 生成，见各语言文档中的 **API 参考** 章节。

@@ -45,8 +45,8 @@ class AcquisitionService:
         self._log_cb = log_cb
         self._save_raw_data = save_raw_data
         self._stream_cb = storage_stream_cb
-        self._stream_sec_start = 0.0
         self._stream_sec_counts: Dict[str, int] = {}
+        self._stream_data_duration_s = 0.0
         self._stream_sec_hist: Optional[Dict[str, Any]] = None
         self._lock = Lock()
         self._running = False
@@ -108,6 +108,14 @@ class AcquisitionService:
         with self._lock:
             return list(self._channel_delays_ps)
 
+    def get_raw_storage_enabled(self) -> bool:
+        with self._lock:
+            return bool(self._save_raw_data)
+
+    def set_raw_storage_enabled(self, enabled: bool) -> None:
+        with self._lock:
+            self._save_raw_data = bool(enabled)
+
     def set_channel_delays_ps(self, values: Sequence[float]) -> None:
         normalized = self._normalize_delays_ps(values, MAX_PACKED_CHANNELS)
         with self._lock:
@@ -165,7 +173,9 @@ class AcquisitionService:
             raise ValueError(f"Unknown stream path: {name}") from exc
 
     def _ensure_output_path(self, block: DataBlock, base_dir: Path) -> Path:
-        dt = datetime.fromtimestamp(block.creationTime / 1000.0, tz=timezone.utc)
+        # Raw data is organized for the operator who is using this computer,
+        # so use the host's local timezone for directory and file names.
+        dt = datetime.fromtimestamp(block.creationTime / 1000.0)
         day = dt.strftime("%Y-%m-%d")
         hour = dt.strftime("%H")
         save_dir = base_dir / day / hour
@@ -255,7 +265,7 @@ class AcquisitionService:
         for path_name, blocks in produced.items():
             path_cfg = self._paths[path_name]
             for block in blocks:
-                if self._save_raw_data:
+                if self.get_raw_storage_enabled():
                     payload = block.serialize()
                     out = self._ensure_output_path(block, path_cfg["datablock_dir"])
                     out.write_bytes(payload)
@@ -280,7 +290,12 @@ class AcquisitionService:
                     block_events = int(sum(block.sizes))
                     self._events_total += block_events
                     self._blocks += 1
-                    block_duration_s = max((block.dataTimeEnd - block.dataTimeBegin) * block.resolution, 1e-9)
+                    duration_ticks = getattr(
+                        block,
+                        "duration_ticks",
+                        block.dataTimeEnd - block.dataTimeBegin,
+                    )
+                    block_duration_s = max(duration_ticks * block.resolution, 1e-9)
                     block_rate = int(block_events / block_duration_s)
                     self._recent_rates.append(block_rate)
                     self._rate_history.append({
@@ -296,27 +311,26 @@ class AcquisitionService:
                         "HistogramAnalyser": hist_res,
                     }
                     if self._stream_cb is not None:
-                        if self._stream_sec_start == 0.0:
-                            self._stream_sec_start = now
                         for k, v in counter_res.items():
                             if k == "Configuration":
                                 continue
                             self._stream_sec_counts[k] = self._stream_sec_counts.get(k, 0) + int(v)
+                        self._stream_data_duration_s += block_duration_s
                         if self._hist.isTurnedOn() and hist_res:
                             self._stream_sec_hist = hist_res
                         elif not self._hist.isTurnedOn():
                             self._stream_sec_hist = None
-                        elapsed = now - self._stream_sec_start
-                        if elapsed >= 1.0:
+                        if self._stream_data_duration_s >= 1.0:
                             payload_to_emit = {
                                 "FetchTime": datetime.now(tz=timezone.utc).isoformat(),
                                 "CounterAnalyser": dict(self._stream_sec_counts),
+                                "DurationSeconds": self._stream_data_duration_s,
                                 "HistogramAnalyser": (
                                     dict(self._stream_sec_hist) if self._stream_sec_hist is not None else None
                                 ),
                             }
                             self._stream_sec_counts.clear()
-                            self._stream_sec_start = now
+                            self._stream_data_duration_s = 0.0
                 if payload_to_emit is not None:
                     self._stream_cb(payload_to_emit)
                 self._metrics_cb(self.snapshot_metrics())
@@ -332,8 +346,8 @@ class AcquisitionService:
             self._last_analyser = {}
             self._rate_inst = 0
             self._recent_rates.clear()
-            self._stream_sec_start = 0.0
             self._stream_sec_counts.clear()
+            self._stream_data_duration_s = 0.0
             self._stream_sec_hist = None
         self._log_cb("info", "Acquisition started")
         return self.snapshot_metrics()
@@ -342,7 +356,7 @@ class AcquisitionService:
         with self._lock:
             self._running = False
         tail = self._packer.flush()
-        if self._save_raw_data:
+        if self.get_raw_storage_enabled():
             for path_name, blocks in tail.items():
                 path_cfg = self._paths.get(path_name)
                 if path_cfg is None:

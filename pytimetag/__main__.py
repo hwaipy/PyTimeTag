@@ -25,7 +25,7 @@ from pytimetag.device.datablock_packer import (
     SplitByChannelEvent,
     SplitByTimeWindow,
 )
-from pytimetag.device.source_registry import list_cli_hardware_sources
+from pytimetag.device.source_registry import get_cli_source_defaults, list_cli_hardware_sources
 from pytimetag.gui.config import StreamPathConfig
 
 
@@ -189,9 +189,13 @@ def main() -> None:
             default=[],
             help="Stream path config (repeatable). Format: NAME:DB_PATH:RAW_DIR. Example: --path main:./store/main.duckdb:./store",
         )
-        gui_parser.add_argument("--device", default="simulator", choices=["simulator"], help="Device type (default: %(default)s)")
-        gui_parser.add_argument("--serial", default="simulator", help="Device serial number (default: %(default)s)")
-        gui_parser.add_argument("--channel-count", type=int, default=16, help="Device channel count (default: %(default)s)")
+        gui_sources = ["simulator"] + list_cli_hardware_sources()
+        gui_parser.add_argument("--device", default="simulator", choices=gui_sources, help="Device type (default: %(default)s)")
+        gui_parser.add_argument("--serial", default=None, help="Device serial number (source-specific default when omitted)")
+        gui_parser.add_argument("--channel-count", type=int, default=None, help="Device channel count (source-specific default when omitted)")
+        gui_parser.add_argument("--driver-path", default=None, help="Optional vendor library path (SeruTek: Tdc_Libusb_Dll.dll)")
+        gui_parser.add_argument("--hardware-buffer-size", type=int, default=None, help="Hardware stream buffer event capacity")
+        gui_parser.add_argument("--hardware-poll-s", type=float, default=None, help="Hardware polling interval in seconds")
         gui_parser.add_argument("--split-mode", choices=["time", "channel"], default="time", help="DataBlock split mode (default: %(default)s)")
         gui_parser.add_argument("--split-s", type=float, default=1.0, help="Split window in seconds for time mode (default: %(default)s)")
         gui_parser.add_argument("--split-channel", type=int, default=0, help="Trigger channel for channel mode (default: %(default)s)")
@@ -201,6 +205,21 @@ def main() -> None:
             help="Comma-separated per-channel delays in picoseconds (16 packed channels). Overrides PYTIMETAG_CHANNEL_DELAYS_PS when non-empty.",
         )
         gui_args = gui_parser.parse_args(sys.argv[2:])
+        gui_defaults = get_cli_source_defaults(gui_args.device)
+        if gui_args.channel_count is None:
+            gui_args.channel_count = int(gui_defaults.get("channel_count", 16))
+        if gui_args.serial is None:
+            default_serial = gui_defaults.get("serial_number")
+            if gui_args.device == "simulator":
+                gui_args.serial = "simulator"
+            elif default_serial is not None:
+                gui_args.serial = str(default_serial)
+            else:
+                gui_parser.error(f"--serial is required for --device {gui_args.device}")
+        if gui_args.hardware_buffer_size is None:
+            gui_args.hardware_buffer_size = int(gui_defaults.get("hardware_buffer_size", int(1e6)))
+        if gui_args.hardware_poll_s is None:
+            gui_args.hardware_poll_s = float(gui_defaults.get("hardware_poll_s", 0.002))
 
         stream_paths: List[StreamPathConfig] = []
         for raw in gui_args.path:
@@ -219,6 +238,12 @@ def main() -> None:
             serve_web=not gui_args.no_web,
             stream_paths=stream_paths or None,
             channel_delays_ps=gui_args.channel_delays_ps.strip() or None,
+            device_type=gui_args.device,
+            device_serial=gui_args.serial,
+            device_channel_count=gui_args.channel_count,
+            device_driver_path=gui_args.driver_path,
+            hardware_buffer_size=gui_args.hardware_buffer_size,
+            hardware_poll_s=gui_args.hardware_poll_s,
         )
         return
 
@@ -255,7 +280,7 @@ def main() -> None:
         help="Split mode: time window or trigger channel event",
     )
     parser.add_argument("--split-channel", type=int, default=0, help="Trigger channel index for --split-mode channel")
-    parser.add_argument("--channel-count", type=int, default=8, help="Active channel count used by source")
+    parser.add_argument("--channel-count", type=int, default=None, help="Active channel count (source-specific default when omitted)")
     parser.add_argument("--resolution", type=float, default=1e-12, help="Seconds per tick")
     parser.add_argument(
         "--post-process",
@@ -264,20 +289,21 @@ def main() -> None:
         help="Enable/disable post-processing analysers (default: enabled)",
     )
     parser.add_argument("--serial", default=None, help="Hardware device serial (when using a hardware --source)")
+    parser.add_argument("--driver-path", default=None, help="Optional vendor library path (SeruTek: Tdc_Libusb_Dll.dll)")
     parser.add_argument("--seed", type=int, default=42, help="Simulator RNG seed")
     parser.add_argument("--update-lo-s", type=float, default=0.05, help="Simulator update interval lower bound")
     parser.add_argument("--update-hi-s", type=float, default=0.10, help="Simulator update interval upper bound")
     parser.add_argument(
         "--hardware-buffer-size",
         type=int,
-        default=int(1e6),
+        default=None,
         dest="hardware_buffer_size",
         help="Hardware stream buffer size (n_max_events; meaning depends on --source plugin)",
     )
     parser.add_argument(
         "--hardware-poll-s",
         type=float,
-        default=0.002,
+        default=None,
         dest="hardware_poll_s",
         help="Hardware poll interval in seconds (meaning depends on --source plugin)",
     )
@@ -310,6 +336,14 @@ def main() -> None:
         )
         raise SystemExit(0)
     args = parser.parse_args()
+
+    source_defaults = get_cli_source_defaults(args.source)
+    if args.channel_count is None:
+        args.channel_count = int(source_defaults.get("channel_count", 8))
+    if args.hardware_buffer_size is None:
+        args.hardware_buffer_size = int(source_defaults.get("hardware_buffer_size", int(1e6)))
+    if args.hardware_poll_s is None:
+        args.hardware_poll_s = float(source_defaults.get("hardware_poll_s", 0.002))
 
     console = Console(file=sys.stdout, force_terminal=True)
     output_base = Path(args.datablock_dir).resolve()

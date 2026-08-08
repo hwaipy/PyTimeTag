@@ -2,16 +2,28 @@
   <div class="config-page">
     <div class="page-header">
       <h2 class="page-title">Device Configuration</h2>
-      <button
-        v-if="selectedDevice?.device_type === 'simulator'"
-        class="settings-btn"
-        title="Channel Settings"
-        @click="openSettingsDialog"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 15.6 12 3.6 3.6 0 0 1 12 15.6z"/>
-        </svg>
-      </button>
+      <div class="page-actions">
+        <label class="store-raw-control" title="Write completed DataBlocks to the configured raw-data directory">
+          <span>Store Raw</span>
+          <q-toggle
+            :model-value="storeRawEnabled"
+            color="green"
+            dense
+            :disable="storeRawSaving || !storeRawAvailable"
+            @update:model-value="updateStoreRaw"
+          />
+        </label>
+        <button
+          v-if="selectedDevice?.device_type === 'simulator'"
+          class="settings-btn"
+          title="Channel Settings"
+          @click="openSettingsDialog"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 15.6 12 3.6 3.6 0 0 1 12 15.6z"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <q-table
@@ -34,6 +46,18 @@
       <template #body-cell-count_rate="props">
         <q-td :props="props">
           <span class="channel-value">{{ props.row.count_rate }}</span>
+        </q-td>
+      </template>
+
+      <template #body-cell-enabled="props">
+        <q-td :props="props">
+          <q-toggle
+            :model-value="props.row.enabled"
+            dense
+            color="green"
+            :disable="isCellSaving(props.row.channel_id, 'enabled')"
+            @update:model-value="saveEnabled(props.row.channel_id, $event)"
+          />
         </q-td>
       </template>
 
@@ -254,14 +278,27 @@ const channels = ref([]);
 const editValues = ref({});
 const savingCells = ref({});
 const editingCell = ref("");
+const storeRawEnabled = ref(false);
+const storeRawSaving = ref(false);
+const storeRawAvailable = ref(true);
 const thresholdRange = ref([-2.0, 2.0]);
 const deadTimeRangeNs = ref([0.0, 1e6]);
-const tableColumns = [
-  { name: "channel", label: "Channel", field: "channel", align: "left" },
-  { name: "count_rate", label: "Count Rate", field: "count_rate", align: "right" },
-  { name: "threshold", label: "Threshold", field: "threshold", align: "right" },
-  { name: "dead_time", label: "Dead Time", field: "dead_time", align: "right" },
-];
+const selectedDevice = computed(() => store.currentDevice);
+const isSerutek = computed(() => selectedDevice.value?.device_type === "serutek");
+const tableColumns = computed(() => {
+  const columns = [
+    { name: "channel", label: "Channel", field: "channel", align: "left" },
+    { name: "count_rate", label: "Count Rate", field: "count_rate", align: "right" },
+  ];
+  if (isSerutek.value) {
+    columns.push({ name: "enabled", label: "Enabled", field: "enabled", align: "center" });
+  }
+  columns.push({ name: "threshold", label: "Threshold", field: "threshold", align: "right" });
+  if (!isSerutek.value) {
+    columns.push({ name: "dead_time", label: "Dead Time", field: "dead_time", align: "right" });
+  }
+  return columns;
+});
 
 const settingsDialogOpen = ref(false);
 const settingsSaving = ref(false);
@@ -297,7 +334,6 @@ function clampToRange(value, low, high) {
   return Math.min(Math.max(value, low), high);
 }
 
-const selectedDevice = computed(() => store.currentDevice);
 let refreshInterval = null;
 /** Avoid stacking /channels polls: 1s timer must not start a new fetch while the previous is still in flight (HTTP/1.1 per-host connection limit → many “pending”). */
 let channelsPollLocked = false;
@@ -395,6 +431,7 @@ const tableRows = computed(() =>
     channel_id: ch.channel_id,
     channel: ch.channel_id,
     count_rate: formatCountRate(ch),
+    enabled: ch.enabled !== false,
     threshold: ch.threshold_voltage,
     dead_time: ch.dead_time_s,
   }))
@@ -404,12 +441,14 @@ function cellKey(channelId, field) {
   return `${channelId}:${field}`;
 }
 
-const editableFieldOrder = ["threshold_voltage", "dead_time_ns"];
+const editableFieldOrder = computed(() =>
+  isSerutek.value ? ["threshold_voltage"] : ["threshold_voltage", "dead_time_ns"]
+);
 
 function getEditableCellSequence() {
   const sequence = [];
   for (const row of tableRows.value) {
-    for (const field of editableFieldOrder) {
+    for (const field of editableFieldOrder.value) {
       sequence.push(cellKey(row.channel_id, field));
     }
   }
@@ -554,6 +593,42 @@ async function saveChannelValue(channelId, field) {
   }
 }
 
+async function saveEnabled(channelId, enabled) {
+  if (!selectedDevice.value || isCellSaving(channelId, "enabled")) return;
+  const key = cellKey(channelId, "enabled");
+  savingCells.value = { ...savingCells.value, [key]: true };
+  try {
+    await store.updateDeviceChannel(
+      selectedDevice.value.device_type,
+      selectedDevice.value.serial_number,
+      channelId,
+      { enabled: Boolean(enabled) }
+    );
+    const channel = channels.value.find((ch) => ch.channel_id === channelId);
+    if (channel) channel.enabled = Boolean(enabled);
+  } catch (err) {
+    console.error("Failed to update channel enabled state:", err);
+  } finally {
+    const next = { ...savingCells.value };
+    delete next[key];
+    savingCells.value = next;
+  }
+}
+
+async function updateStoreRaw(enabled) {
+  if (storeRawSaving.value || !storeRawAvailable.value) return;
+  storeRawSaving.value = true;
+  try {
+    const data = await store.putStoreRaw(Boolean(enabled));
+    storeRawEnabled.value = Boolean(data.enabled);
+  } catch (err) {
+    console.error("Failed to update raw DataBlock storage:", err);
+    storeRawEnabled.value = Boolean(store.storeRawEnabled);
+  } finally {
+    storeRawSaving.value = false;
+  }
+}
+
 let loadChannelsVersion = 0;
 
 async function loadChannels() {
@@ -588,6 +663,15 @@ watch(
 onMounted(async () => {
   await store.fetchDevices();
   await store.fetchStreamPaths();
+  try {
+    const rawStorage = await store.fetchStoreRaw();
+    storeRawAvailable.value = true;
+    storeRawEnabled.value = Boolean(rawStorage.enabled);
+  } catch (err) {
+    console.warn("Store Raw API is unavailable until the backend is restarted", err);
+    storeRawAvailable.value = false;
+    storeRawEnabled.value = false;
+  }
   await loadChannels();
   refreshInterval = window.setInterval(() => {
     if (channelsPollLocked) return;
@@ -741,6 +825,23 @@ onUnmounted(() => {
   font-weight: 600;
   color: #1d1d1f;
   margin: 0;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.store-raw-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+  user-select: none;
 }
 
 .settings-btn {

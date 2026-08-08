@@ -22,6 +22,7 @@ export const useRuntimeStore = defineStore("runtime", {
     latestCounts: {},
     metricsHistory: [],
     latestHistogramAnalyser: null,
+    storeRawEnabled: false,
     _storageAnalyserStreamEs: null,
   }),
   getters: {
@@ -72,6 +73,22 @@ export const useRuntimeStore = defineStore("runtime", {
         body: JSON.stringify({ delays_ps }),
       });
       return await res.json();
+    },
+    async fetchStoreRaw() {
+      const res = await this._request(`${API_BASE}/acquisition/store_raw`);
+      const data = await res.json();
+      this.storeRawEnabled = Boolean(data.enabled);
+      return data;
+    },
+    async putStoreRaw(enabled) {
+      const res = await this._request(`${API_BASE}/acquisition/store_raw`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: Boolean(enabled) }),
+      });
+      const data = await res.json();
+      this.storeRawEnabled = Boolean(data.enabled);
+      return data;
     },
     async fetchDatablocks(limit = this.datablocksLimit) {
       this.datablocksLimit = limit;
@@ -157,13 +174,19 @@ export const useRuntimeStore = defineStore("runtime", {
           }
           const nextCounts = {};
           const rates = [];
+          const t = msg.FetchTime ? new Date(msg.FetchTime).getTime() : Date.now();
+          const previousPoint = this.metricsHistory[this.metricsHistory.length - 1];
+          const elapsedSincePrevious = previousPoint
+            ? Math.max((t - previousPoint.time) / 1000, 1e-9)
+            : 1;
+          const durationSecondsRaw = Number(msg.DurationSeconds ?? elapsedSincePrevious);
+          const durationSeconds = durationSecondsRaw > 0 ? durationSecondsRaw : 1;
           for (let ch = 0; ch < chCount; ch++) {
-            const v = Number(raw[String(ch)] ?? 0);
+            const v = Number(raw[String(ch)] ?? 0) / durationSeconds;
             nextCounts[ch] = v;
             rates.push(v);
           }
           this.latestCounts = nextCounts;
-          const t = msg.FetchTime ? new Date(msg.FetchTime).getTime() : Date.now();
           const nextHist = [...this.metricsHistory, { time: t, rates }];
           this.metricsHistory = nextHist.length > 120 ? nextHist.slice(-120) : nextHist;
           this.latestHistogramAnalyser = msg.HistogramAnalyser ?? null;

@@ -91,11 +91,8 @@ const route = useRoute();
 const navItems = [
   { path: "/", label: "Config" },
   { path: "/traces", label: "Traces" },
-  { path: "/dashboard", label: "Dashboard" },
-  { path: "/offline", label: "Offline" },
-  { path: "/storage", label: "Storage" },
-  { path: "/settings", label: "Settings" },
-  { path: "/logs", label: "Logs" },
+  // Dashboard, Offline, Storage, Settings, and Logs are temporarily hidden.
+  // Their routes remain available so they can be restored without changing routing.
 ];
 
 const navLinksRef = ref(null);

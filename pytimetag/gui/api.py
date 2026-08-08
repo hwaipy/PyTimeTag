@@ -41,9 +41,14 @@ class ChannelDelaysPsUpdateRequest(BaseModel):
     delays_ps: List[float]
 
 
+class RawStorageUpdateRequest(BaseModel):
+    enabled: bool
+
+
 class ChannelConfigRequest(BaseModel):
     dead_time_s: Optional[float] = None
     threshold_voltage: Optional[float] = None
+    offset_ps: Optional[int] = None
     enabled: Optional[bool] = None
     mode: Optional[str] = None
     period_count: Optional[int] = None
@@ -259,7 +264,29 @@ def create_app(config: GuiConfig) -> FastAPI:
                 data_callback=acquisition._on_words,
             )
         except ValueError:
-            pass  # already exists
+            if instance_manager.get_instance(config.device_type, config.device_serial) is None:
+                raise
+    elif config.device_type in list_cli_hardware_sources():
+        connect_kwargs: Dict[str, Any] = {
+            "resolution": resolution,
+            "n_max_events": config.hardware_buffer_size,
+            "poll_interval_s": config.hardware_poll_s,
+        }
+        if config.device_type == "serutek":
+            connect_kwargs["dll_path"] = config.device_driver_path
+        try:
+            instance_manager.create_hardware_device(
+                device_type=config.device_type,
+                serial_number=config.device_serial,
+                channel_count=config.device_channel_count,
+                data_callback=acquisition._on_words,
+                split=split_cfg,
+                model_name="HSPCL6" if config.device_type == "serutek" else None,
+                **connect_kwargs,
+            )
+        except ValueError:
+            if instance_manager.get_instance(config.device_type, config.device_serial) is None:
+                raise
     else:
         raise ValueError(f"Unsupported GUI device type: {config.device_type}")
 
@@ -270,6 +297,14 @@ def create_app(config: GuiConfig) -> FastAPI:
     acquisition.start()
     instance_manager.start_instance(config.device_type, config.device_serial)
     append_log("info", "GUI API initialized")
+
+    @app.on_event("shutdown")
+    async def _shutdown_services() -> None:
+        try:
+            instance_manager.remove_instance(config.device_type, config.device_serial)
+        finally:
+            acquisition.stop()
+            conn.close()
 
     def read_settings() -> Dict[str, Any]:
         rows = conn.execute("SELECT key, value_json FROM GUISettings").fetchall()
@@ -308,6 +343,17 @@ def create_app(config: GuiConfig) -> FastAPI:
         append_log("info", "Acquisition channel delays (ps) updated")
         return {"delays_ps": acquisition.get_channel_delays_ps()}
 
+    @app.get("/api/v1/acquisition/store_raw")
+    async def get_raw_storage() -> Dict[str, bool]:
+        return {"enabled": acquisition.get_raw_storage_enabled()}
+
+    @app.put("/api/v1/acquisition/store_raw")
+    async def put_raw_storage(body: RawStorageUpdateRequest) -> Dict[str, bool]:
+        acquisition.set_raw_storage_enabled(body.enabled)
+        state = acquisition.get_raw_storage_enabled()
+        append_log("info", f"Raw DataBlock storage {'enabled' if state else 'disabled'}")
+        return {"enabled": state}
+
     @app.get("/api/v1/rates")
     async def get_rates(limit: int = 100) -> Dict[str, Any]:
         return {"items": acquisition.get_rate_history(limit)}
@@ -339,11 +385,13 @@ def create_app(config: GuiConfig) -> FastAPI:
     @app.get("/api/v1/devices/{device_type}/{serial_number}/channels")
     async def get_device_channels(device_type: str, serial_number: str) -> Dict[str, Any]:
         """Get channel information for the active device instance."""
+        if (device_type, serial_number) != (config.device_type, config.device_serial):
+            raise HTTPException(status_code=404, detail="Device instance not found")
         try:
-            channels = instance_manager.get_channel_info(config.device_type, config.device_serial)
+            channels = instance_manager.get_channel_info(device_type, serial_number)
             return {
-                "device_type": config.device_type,
-                "serial_number": config.device_serial,
+                "device_type": device_type,
+                "serial_number": serial_number,
                 "channels": channels,
             }
         except ValueError as exc:
@@ -357,18 +405,20 @@ def create_app(config: GuiConfig) -> FastAPI:
         body: ChannelConfigRequest,
     ) -> Dict[str, Any]:
         """Set channel configuration for the active device instance."""
+        if (device_type, serial_number) != (config.device_type, config.device_serial):
+            raise HTTPException(status_code=404, detail="Device instance not found")
         try:
             cfg = body.dict(exclude_unset=True)
-            instance_manager.set_channel_config(config.device_type, config.device_serial, channel_id, cfg)
-            append_log("info", f"Channel {channel_id} updated for {config.device_type}:{config.device_serial}")
+            instance_manager.set_channel_config(device_type, serial_number, channel_id, cfg)
+            append_log("info", f"Channel {channel_id} updated for {device_type}:{serial_number}")
             return {
                 "updated": True,
-                "device_type": config.device_type,
-                "serial_number": config.device_serial,
+                "device_type": device_type,
+                "serial_number": serial_number,
                 "channel_id": channel_id,
                 "config": cfg,
             }
-        except ValueError as exc:
+        except (ValueError, NotImplementedError, RuntimeError) as exc:
             detail = str(exc)
             status = 404 if "not found" in detail.lower() else 400
             raise HTTPException(status_code=status, detail=detail) from exc
@@ -642,19 +692,6 @@ def create_app(config: GuiConfig) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    web_dist = Path(__file__).resolve().parent / "webui_dist"
-    if config.serve_web and web_dist.exists():
-        app.mount("/assets", StaticFiles(directory=str(web_dist / "assets")), name="assets")
-
-        @app.get("/")
-        async def web_index() -> FileResponse:
-            return FileResponse(web_dist / "index.html")
-
-        @app.get("/{full_path:path}")
-        async def web_fallback(full_path: str) -> FileResponse:
-            _ = full_path
-            return FileResponse(web_dist / "index.html")
-
     @app.get("/healthz")
     async def healthz() -> Dict[str, str]:
         return {"status": "ok"}
@@ -673,5 +710,19 @@ def create_app(config: GuiConfig) -> FastAPI:
         except BaseException:
             broker_ok = False
         return {"ready": db_ok and broker_ok, "duckdb": db_ok, "celery_broker": broker_ok}
+
+    # Register the SPA catch-all last so it cannot shadow health or API routes.
+    web_dist = Path(__file__).resolve().parent / "webui_dist"
+    if config.serve_web and web_dist.exists():
+        app.mount("/assets", StaticFiles(directory=str(web_dist / "assets")), name="assets")
+
+        @app.get("/")
+        async def web_index() -> FileResponse:
+            return FileResponse(web_dist / "index.html")
+
+        @app.get("/{full_path:path}")
+        async def web_fallback(full_path: str) -> FileResponse:
+            _ = full_path
+            return FileResponse(web_dist / "index.html")
 
     return app

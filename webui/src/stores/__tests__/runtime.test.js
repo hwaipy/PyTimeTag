@@ -42,6 +42,91 @@ describe('Runtime Store', () => {
     })
   })
 
+  describe('Storage analyser stream', () => {
+    it('converts accumulated counts to counts per second using data duration', () => {
+      let source
+      global.EventSource = class {
+        constructor(url) {
+          this.url = url
+          source = this
+        }
+        close() {}
+      }
+
+      const store = useRuntimeStore()
+      store.currentDevice = { channel_count: 1 }
+      store.startStorageAnalyserStream()
+      source.onmessage({
+        data: JSON.stringify({
+          FetchTime: '2026-08-08T10:00:00Z',
+          CounterAnalyser: { 0: 200 },
+          DurationSeconds: 2,
+        }),
+      })
+
+      expect(source.url).toBe('/api/v1/storage/analysers/stream')
+      expect(store.latestCounts[0]).toBe(100)
+      expect(store.metricsHistory[0].rates[0]).toBe(100)
+      store.stopStorageAnalyserStream()
+    })
+
+    it('uses SSE time spacing when an older backend omits data duration', () => {
+      let source
+      global.EventSource = class {
+        constructor() {
+          source = this
+        }
+        close() {}
+      }
+
+      const store = useRuntimeStore()
+      store.currentDevice = { channel_count: 1 }
+      store.startStorageAnalyserStream()
+      source.onmessage({
+        data: JSON.stringify({
+          FetchTime: '2026-08-08T10:00:00Z',
+          CounterAnalyser: { 0: 100 },
+        }),
+      })
+      source.onmessage({
+        data: JSON.stringify({
+          FetchTime: '2026-08-08T10:00:02Z',
+          CounterAnalyser: { 0: 200 },
+        }),
+      })
+
+      expect(store.latestCounts[0]).toBe(100)
+      expect(store.metricsHistory[1].rates[0]).toBe(100)
+      store.stopStorageAnalyserStream()
+    })
+  })
+
+  describe('Raw DataBlock storage', () => {
+    it('loads and updates the runtime Store Raw state', async () => {
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ enabled: false }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ enabled: true }),
+        })
+
+      const store = useRuntimeStore()
+      await store.fetchStoreRaw()
+      expect(store.storeRawEnabled).toBe(false)
+
+      await store.putStoreRaw(true)
+      expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/acquisition/store_raw', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true }),
+      })
+      expect(store.storeRawEnabled).toBe(true)
+    })
+  })
+
   describe('Storage API - Unified Style', () => {
     it('should fetch storage collections', async () => {
       const mockResponse = { items: ['CounterAnalyser', 'HistogramAnalyser'] }

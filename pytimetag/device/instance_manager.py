@@ -19,6 +19,7 @@ from pytimetag.device.datablock_packer import (
 )
 from pytimetag.device.manager import device_type_manager
 from pytimetag.device.Simulator import MAX_PACKED_CHANNELS, TimeTagSimulator
+from pytimetag.device.source_registry import import_cli_plugin
 from pytimetag.device.SwabianSimulator import SwabianSimulator
 
 DEVICE_LIMITS: Dict[str, Dict[str, Tuple[float, float]]] = {
@@ -29,6 +30,10 @@ DEVICE_LIMITS: Dict[str, Dict[str, Tuple[float, float]]] = {
     "swabian_simulator": {
         "threshold_voltage": (-2.0, 2.0),
         "dead_time_s": (5e-9, 500e-9),
+    },
+    "serutek": {
+        "threshold_voltage": (0.0, 4.096),
+        "dead_time_s": (0.0, 0.0),
     },
 }
 
@@ -59,6 +64,8 @@ class DeviceInstance:
             return "Simulator"
         if self.device_type == "swabian_simulator":
             return "Swabian"
+        if self.device_type == "serutek":
+            return "SeruTek"
         if self.model_name:
             return self.model_name
         return self.device_type
@@ -231,6 +238,95 @@ class DeviceInstanceManager:
             self._instances[key] = instance
             return instance
 
+    def create_hardware_device(
+        self,
+        device_type: str,
+        serial_number: str,
+        channel_count: int,
+        data_callback: Optional[Callable[[np.ndarray], None]] = None,
+        split: Optional[Union[SplitByTimeWindow, SplitByChannelEvent]] = None,
+        model_name: Optional[str] = None,
+        **connect_kwargs: Any,
+    ) -> DeviceInstance:
+        """Create a lazily loaded physical-device instance for the Web GUI."""
+        if device_type in ("simulator", "swabian_simulator"):
+            raise ValueError(f"{device_type!r} is not a physical hardware source")
+        key = f"{device_type}:{serial_number}"
+
+        with self._lock:
+            if key in self._instances:
+                raise ValueError(f"Device instance '{key}' already exists")
+            if data_callback is None:
+                data_callback = lambda words: None
+            if split is None:
+                split = SplitByTimeWindow(int(1e12))
+
+            # The plugin import registers its factory without eagerly loading any
+            # vendor runtime when another source is selected.
+            import_cli_plugin(device_type)
+            packer = DataBlockStreamPacker(
+                [
+                    DataBlockPackerPath(
+                        "stream",
+                        split,
+                        channel_count=MAX_PACKED_CHANNELS,
+                        resolution=1e-12,
+                    )
+                ]
+            )
+            count_rates = [0.0] * channel_count
+
+            def _wrapped_callback(words: np.ndarray) -> None:
+                data_callback(words)
+                produced = packer.feed_from_packed(words)
+                for blocks in produced.values():
+                    for block in blocks:
+                        duration_ticks = getattr(
+                            block,
+                            "duration_ticks",
+                            block.dataTimeEnd - block.dataTimeBegin,
+                        )
+                        duration_s = max(duration_ticks * block.resolution, 1e-15)
+                        for ch_idx in range(min(len(block.sizes), channel_count)):
+                            count_rates[ch_idx] = int(block.sizes[ch_idx] / duration_s)
+
+            device = device_type_manager.connect(
+                device_type,
+                serial_number=serial_number,
+                dataUpdate=_wrapped_callback,
+                channel_count=channel_count,
+                **connect_kwargs,
+            )
+            device._channel_count_rates = count_rates
+            original_start = device.start
+            original_stop = device.stop
+
+            def _wrapped_start() -> None:
+                packer.reset()
+                for idx in range(channel_count):
+                    count_rates[idx] = 0.0
+                original_start()
+
+            def _wrapped_stop() -> None:
+                try:
+                    original_stop()
+                finally:
+                    packer.flush()
+                    for idx in range(channel_count):
+                        count_rates[idx] = 0.0
+
+            device.start = _wrapped_start
+            device.stop = _wrapped_stop
+
+            instance = DeviceInstance(
+                device_type=device_type,
+                serial_number=serial_number,
+                device=device,
+                model_name=model_name or device.__class__.__name__,
+            )
+            self._instances[key] = instance
+            return instance
+
     def create_swabian_simulator(
         self,
         serial_number: str = "SWABIAN-001",
@@ -346,8 +442,15 @@ class DeviceInstanceManager:
             if instance is None:
                 raise ValueError(f"Device instance '{key}' not found")
 
-            instance.device.stop()
-            del self._instances[key]
+            try:
+                instance.device.stop()
+            finally:
+                try:
+                    close = getattr(instance.device, "close", None)
+                    if callable(close):
+                        close()
+                finally:
+                    del self._instances[key]
 
     def get_channel_info(
         self, device_type: str, serial_number: str
@@ -485,11 +588,15 @@ class DeviceInstanceManager:
                 if key in allowed_fields and hasattr(ch, key):
                     setattr(ch, key, value)
         else:
-            # For other devices, use base device methods
             if "dead_time_s" in config:
                 device.set_deadtime(channel_id, config["dead_time_s"])
-            if "threshold_voltage" in config:
-                device.set_trigger_level(channel_id, config["threshold_voltage"])
+            channel_config = {
+                key: config[key]
+                for key in ("threshold_voltage", "offset_ps", "enabled")
+                if key in config
+            }
+            if channel_config:
+                device.set_channel(channel_id, **channel_config)
 
 
 # Global instance manager
